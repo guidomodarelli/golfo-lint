@@ -12,6 +12,7 @@ Tres decisiones definen el paquete:
 | --- | --- | --- | --- |
 | Bugs, código confuso, nombres, accesibilidad, React, Next.js, tests | ESLint | `@golfo/lint/eslint` | `eslint .` |
 | CSS y SCSS inválido o frágil | Stylelint | `@golfo/lint/stylelint` | `golfo-lint styles` |
+| React: estado y efectos, rendimiento, seguridad, accesibilidad | react-doctor | — | `golfo-lint react` |
 | Código duplicado | jscpd | `@golfo/lint/jscpd` | `golfo-lint duplicates` |
 | Archivos, exports y dependencias sin uso | knip | `@golfo/lint/knip` | `golfo-lint unused` |
 | Complejidad, largo y parámetros por función | lizard | `@golfo/lint/lizard` | `golfo-lint complexity` |
@@ -123,6 +124,16 @@ Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no
 - `golfo-lint duplicates` falla cuando más del 1 % de las líneas está duplicado (bloques de al menos 50 tokens y 5 líneas). Un `.jscpd.json` del proyecto reemplaza los valores compartidos.
 - `golfo-lint unused` corre knip. Para partir de los valores compartidos, exportá `createKnipConfig()` de `@golfo/lint/knip` en `knip.config.js`.
 - `golfo-lint complexity` corre lizard con los límites compartidos. Lo busca instalado, después con `uvx lizard@1.24.1` y después con `python -m lizard`.
+
+## react-doctor
+
+`golfo-lint react`, en proyectos que dependen de `react`, corre [react-doctor](https://github.com/millionco/react-doctor): unas 900 reglas de bugs, estado y efectos, rendimiento, seguridad, accesibilidad y mantenibilidad. Sus reglas de diseño visual vienen apagadas, porque el propio react-doctor las considera preferencias de una guía de diseño. `golfo-lint` lo ejecuta con:
+
+- `--blocking warning`: las advertencias también fallan.
+- `--no-respect-inline-disables`: los comentarios que silencian reglas no tienen efecto.
+- `--no-telemetry` y `--no-supply-chain`: no envía datos de uso, el score ni la lista de dependencias a servicios externos.
+
+Un `doctor.config.ts` del proyecto puede ajustar reglas. react-doctor usa una licencia MIT modificada que pide permiso para usarlo como datos de entrenamiento de IA o para venderlo como servicio; usarlo como linter no está restringido.
 
 ## Paquetes, workflows, secretos y monorepos
 

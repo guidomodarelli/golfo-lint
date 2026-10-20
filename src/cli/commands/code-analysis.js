@@ -1,6 +1,6 @@
 /**
  * @module cli/commands/code-analysis Subcommands that analyze source code: duplication (jscpd), unused code
- * (knip), complexity (lizard), styles (Stylelint) and architecture (dependency-cruiser).
+ * (knip), complexity (lizard), styles (Stylelint), architecture (dependency-cruiser) and React (react-doctor).
  */
 import { fileURLToPath } from "node:url";
 import { createJscpdArguments } from "../../jscpd/create-jscpd-arguments.js";
@@ -115,6 +115,49 @@ export const architectureCommand = {
       packageName: "dependency-cruiser",
       binName: "depcruise",
       arguments: ["--config", projectConfig ?? sharedConfigPath("dependency-cruiser/default.config.js"), ...sources],
+    });
+  },
+};
+
+/** Dependency fields that can declare React. */
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
+
+/**
+ * react-doctor flags for agents: warnings fail, inline suppressions are neutralized, and nothing leaves the
+ * machine (no telemetry, no score API, no dependency list sent to Socket.dev).
+ */
+const REACT_DOCTOR_ARGUMENTS = [
+  "--yes",
+  "--verbose",
+  "--blocking",
+  "warning",
+  "--no-respect-inline-disables",
+  "--no-telemetry",
+  "--no-supply-chain",
+];
+
+/**
+ * Checks whether a project depends on React.
+ * @param {string} cwd - Project folder.
+ * @returns {boolean} Whether `package.json` declares `react` in any dependency field.
+ */
+function dependsOnReact(cwd) {
+  const manifest = readProjectManifest(cwd);
+  return DEPENDENCY_FIELDS.some((field) => {
+    const dependencies = manifest?.[field];
+    return typeof dependencies === "object" && dependencies !== null && "react" in dependencies;
+  });
+}
+
+/** @type {LintCommand} */
+export const reactCommand = {
+  description: "React: estado y efectos, rendimiento, seguridad y accesibilidad (react-doctor).",
+  skipReason: (cwd) => (dependsOnReact(cwd) ? undefined : "el proyecto no depende de react"),
+  run(context) {
+    return runPackageBin(context, {
+      packageName: "react-doctor",
+      binName: "react-doctor",
+      arguments: [...REACT_DOCTOR_ARGUMENTS, ...context.toolArguments],
     });
   },
 };

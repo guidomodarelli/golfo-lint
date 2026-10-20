@@ -12,4 +12,5 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 - Configuración de dependency-cruiser (`@golfo/lint/dependency-cruiser`) con ciclos, paquetes no declarados, devDependencies en producción y reglas de capas hexagonales, y el comando `golfo-lint architecture`.
 - `golfo-lint duplicates` (jscpd), `golfo-lint unused` (knip) y `golfo-lint complexity` (lizard, con los mismos límites que ESLint).
 - `golfo-lint package` (publint y Are the Types Wrong), `golfo-lint workflows` (actionlint y zizmor), `golfo-lint secrets` (gitleaks) y `golfo-lint monorepo` (sherif).
+- `golfo-lint react` (react-doctor): bugs de estado y efectos, rendimiento, seguridad y accesibilidad en proyectos React, con las advertencias como errores, sin comentarios que silencien reglas y sin telemetría.
 - `golfo-lint all`: ejecuta todos los análisis que aplican al proyecto y falla si alguno falla.

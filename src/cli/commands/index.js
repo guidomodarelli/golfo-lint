@@ -7,6 +7,7 @@ import {
   architectureCommand,
   complexityCommand,
   duplicatesCommand,
+  reactCommand,
   stylesCommand,
   unusedCommand,
 } from "./code-analysis.js";
@@ -21,6 +22,7 @@ const ANALYSIS_COMMANDS = {
   unused: unusedCommand,
   complexity: complexityCommand,
   styles: stylesCommand,
+  react: reactCommand,
   architecture: architectureCommand,
   package: packageCommand,
   workflows: workflowsCommand,

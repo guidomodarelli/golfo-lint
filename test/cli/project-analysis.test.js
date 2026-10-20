@@ -92,6 +92,19 @@ describe("golfo-lint architecture", () => {
   });
 });
 
+describe("golfo-lint react", () => {
+  it("detecta estado derivado e índices como key, aunque sean advertencias", async () => {
+    const { exitCode } = await runSilently("react", fixturePath("react-project"));
+    assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("no aplica a proyectos sin React", async () => {
+    const { exitCode, messages } = await runSilently("react", fixturePath("cycle"));
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+    assert.match(messages[0], /no aplica \(el proyecto no depende de react\)/);
+  });
+});
+
 describe("golfo-lint styles", () => {
   it("detecta propiedades desconocidas, ids e !important en SCSS", async () => {
     const { exitCode } = await runSilently("styles", fixturePath("styles"));

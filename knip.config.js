@@ -2,6 +2,8 @@
 import { createKnipConfig } from "./src/knip/index.js";
 
 export default createKnipConfig({
+  // Projects analyzed by the tests, with code that is unused or wrong on purpose.
+  ignore: ["test/fixtures/**"],
   entry: [
     // Read by `golfo-rp create-version`, which knip has no plugin for.
     "golfo-rp.config.js",
@@ -9,5 +11,5 @@ export default createKnipConfig({
     "src/*/default.config.js",
   ],
   // The `golfo-lint` subcommands run these executables by path, which knip cannot follow.
-  ignoreDependencies: ["jscpd", "dependency-cruiser", "publint", "@arethetypeswrong/cli", "sherif"],
+  ignoreDependencies: ["jscpd", "dependency-cruiser", "publint", "@arethetypeswrong/cli", "sherif", "react-doctor"],
 });

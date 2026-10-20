@@ -1,7 +1,7 @@
 {
   "name": "@golfo/lint",
   "version": "0.0.0",
-  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
+  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
   "type": "module",
   "license": "MIT",
   "author": "Guido Modarelli",
@@ -22,6 +22,7 @@
     "knip",
     "lizard",
     "publint",
+    "react-doctor",
     "stylelint",
     "zizmor"
   ],
@@ -101,6 +102,7 @@
     "jscpd": "^5.4.2",
     "knip": "^6.42.1",
     "publint": "^0.3.25",
+    "react-doctor": "^0.9.18",
     "sherif": "^1.13.0",
     "stylelint": "^17.16.0",
     "stylelint-config-recommended-scss": "^17.0.1",
