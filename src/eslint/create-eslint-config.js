@@ -3,11 +3,16 @@
  * complexity and unclear names, and never rules about formatting.
  */
 import process from "node:process";
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslintJs from "@eslint/js";
+import nextPlugin from "@next/eslint-plugin-next";
+import vitestPlugin from "@vitest/eslint-plugin";
 import { createTypeScriptImportResolver } from "eslint-import-resolver-typescript";
 import importX from "eslint-plugin-import-x";
+import jsxA11y from "eslint-plugin-jsx-a11y-x";
 import promisePlugin from "eslint-plugin-promise";
 import reactHooks from "eslint-plugin-react-hooks";
+import reactEffects from "eslint-plugin-react-you-might-not-need-an-effect";
 import regexpPlugin from "eslint-plugin-regexp";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicorn from "eslint-plugin-unicorn";
@@ -68,8 +73,12 @@ const ALLOWED_ABBREVIATIONS = {
 const PLUGINS_BY_PREFIX = /** @type {never} */ ({
   "@typescript-eslint": tseslint.plugin,
   "import-x": importX,
+  "jsx-a11y-x": jsxA11y,
   promise: promisePlugin,
   "react-hooks": reactHooks,
+  "react-you-might-not-need-an-effect": reactEffects,
+  "@next/next": nextPlugin,
+  vitest: vitestPlugin,
   regexp: regexpPlugin,
   sonarjs,
   unicorn,
@@ -81,7 +90,13 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * from `eslint.config.js`. Defaults to the current directory.
  * @property {boolean} [typeChecked] - Whether to enable rules that need type information (default `true`).
  * They are slower but catch floating promises, unsafe `any` and unnecessary conditions.
- * @property {boolean} [react] - Whether to enable the React hooks rules (default `false`).
+ * @property {boolean} [react] - Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect`
+ * rules (default `false`).
+ * @property {boolean} [next] - Whether to enable the Next.js rules, Core Web Vitals included (default `false`).
+ * @property {boolean} [vitest] - Whether to enable the Vitest rules in test files: no focused or skipped tests,
+ * no tests without assertions (default `false`).
+ * @property {boolean} [allowDisableComments] - Whether `eslint-disable` comments may silence a rule, as long as
+ * they explain why (default `false`: an agent has to fix the code, not silence the linter).
  * @property {string[]} [ignores] - Extra globs to skip, besides dependencies and build output.
  * @property {string[]} [testFiles] - Globs of test files, which get relaxed limits (default: common test paths).
  */
@@ -115,10 +130,8 @@ function createCoreRules() {
     "no-useless-concat": "error",
     "no-useless-return": "error",
     "no-var": "error",
-    "object-shorthand": "error",
     "prefer-const": "error",
     "prefer-promise-reject-errors": "error",
-    "prefer-template": "error",
   };
 }
 
@@ -151,8 +164,8 @@ function createPluginRules() {
     "import-x/no-named-as-default-member": "off",
     "import-x/no-unresolved": "off",
     "sonarjs/cognitive-complexity": ["error", MAX_COGNITIVE_COMPLEXITY],
-    // `null` is part of React, JSON and SQL contracts.
-    "unicorn/no-null": "off",
+    // Naming rules from unicorn's opinionated set: an agent that reads `error` and full words needs no guessing.
+    "unicorn/catch-error-name": ["error", { name: "error" }],
     "unicorn/name-replacements": ["error", { allowList: ALLOWED_ABBREVIATIONS, checkFilenames: false }],
   };
 }
@@ -180,6 +193,84 @@ function createTypeCheckedConfigs(tsconfigRootDir) {
 }
 
 /**
+ * Severity ESLint reports but never fails on; agents ignore it, so the preset has none.
+ * @type {Set<unknown>}
+ */
+const WARNING_SEVERITIES = new Set(["warn", 1]);
+
+/**
+ * Turns every warning into an error. Agents act on failures, not on warnings, and a warning that never
+ * fails lets the problem it reports pile up.
+ * @param {FlatConfig[]} configs - Config objects.
+ * @returns {FlatConfig[]} The same configs with `error` wherever they had `warn`.
+ */
+function promoteWarningsToErrors(configs) {
+  return configs.map((config) => {
+    if (config.rules === undefined) {
+      return config;
+    }
+    const rules = Object.fromEntries(
+      Object.entries(config.rules).map(([ruleName, entry]) => {
+        if (Array.isArray(entry)) {
+          const [severity, ...ruleOptions] = entry;
+          return [ruleName, WARNING_SEVERITIES.has(severity) ? ["error", ...ruleOptions] : entry];
+        }
+        return [ruleName, WARNING_SEVERITIES.has(entry) ? "error" : entry];
+      }),
+    );
+    return { ...config, rules };
+  });
+}
+
+/**
+ * Rules about `eslint-disable` and other directive comments.
+ * @param {boolean} allowDisableComments - Whether directive comments may silence rules.
+ * @returns {FlatConfig} Config object.
+ */
+function createDirectiveCommentsConfig(allowDisableComments) {
+  return {
+    name: "golfo-lint/directive-comments",
+    plugins: { "eslint-comments": eslintComments },
+    linterOptions: { reportUnusedDisableDirectives: "error", reportUnusedInlineConfigs: "error" },
+    rules: allowDisableComments
+      ? {
+          "eslint-comments/no-unlimited-disable": "error",
+          "eslint-comments/require-description": "error",
+          "eslint-comments/disable-enable-pair": "error",
+        }
+      : { "eslint-comments/no-use": ["error", { allow: [] }] },
+  };
+}
+
+/**
+ * Rules for the frameworks a project declares.
+ * @param {{ react: boolean; next: boolean; vitest: boolean; testFiles: string[] }} frameworks - What the project uses.
+ * @returns {FlatConfig[]} Config objects.
+ */
+function createFrameworkConfigs(frameworks) {
+  return [
+    ...(frameworks.react
+      ? [reactHooks.configs.flat.recommended, jsxA11y.configs.recommended, reactEffects.configs.strict]
+      : []),
+    ...(frameworks.next ? [nextPlugin.configs["core-web-vitals"]] : []),
+    ...(frameworks.vitest && frameworks.testFiles.length > 0
+      ? [
+          /** @type {FlatConfig} */ ({
+            ...vitestPlugin.configs.recommended,
+            files: frameworks.testFiles,
+            rules: {
+              ...vitestPlugin.configs.recommended.rules,
+              "vitest/no-standalone-expect": "error",
+              "vitest/require-to-throw-message": "error",
+              "vitest/valid-title": "error",
+            },
+          }),
+        ]
+      : []),
+  ];
+}
+
+/**
  * Relaxed limits for test files: they list cases, repeat fixtures and nest `describe` callbacks.
  * @param {string[]} testFiles - Globs of test files.
  * @returns {FlatConfig} Config object.
@@ -193,25 +284,38 @@ function createTestFilesConfig(testFiles) {
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
       "sonarjs/no-duplicate-string": "off",
-      "unicorn/no-useless-undefined": "off",
     },
   };
 }
 
 /**
- * Builds the shared ESLint flat config. It enables only rules that catch bugs, dead code, excessive complexity
- * or unclear names, and turns off every formatting rule of the plugins it uses, so it can sit next to any
- * formatter without conflicts.
+ * Builds the shared ESLint flat config, meant for code written by AI agents. It enables only rules that catch
+ * bugs, dead code, excessive complexity or unclear names, turns off every formatting rule of the plugins it uses,
+ * reports everything as an error and forbids silencing rules with comments.
  * @param {EslintConfigOptions} [options] - What the project uses.
  * @returns {FlatConfig[]} Flat config to export from `eslint.config.js`.
  */
 export function createEslintConfig(options = {}) {
   /** @type {Required<EslintConfigOptions>} */
-  const defaults = { tsconfigRootDir: process.cwd(), typeChecked: true, react: false, ignores: [], testFiles: TEST_FILE_GLOBS };
-  const { tsconfigRootDir, typeChecked, react, ignores, testFiles } = { ...defaults, ...options };
+  const defaults = {
+    tsconfigRootDir: process.cwd(),
+    typeChecked: true,
+    react: false,
+    next: false,
+    vitest: false,
+    allowDisableComments: false,
+    ignores: [],
+    testFiles: TEST_FILE_GLOBS,
+  };
+  const { tsconfigRootDir, typeChecked, react, next, vitest, allowDisableComments, ignores, testFiles } = {
+    ...defaults,
+    ...options,
+  };
 
-  return [
+  return promoteWarningsToErrors([
     { name: "golfo-lint/ignores", ignores: [...IGNORED_PATH_GLOBS, ...ignores] },
+    // ESLint only lints extensions some config lists; without this, `.jsx` files would be skipped.
+    { name: "golfo-lint/files", files: [...JAVASCRIPT_FILE_GLOBS, ...TYPESCRIPT_FILE_GLOBS] },
     eslintJs.configs.recommended,
     ...tseslint.configs.recommended,
     importX.flatConfigs.recommended,
@@ -219,9 +323,10 @@ export function createEslintConfig(options = {}) {
     promisePlugin.configs["flat/recommended"],
     regexpPlugin.configs["flat/recommended"],
     sonarjs.configs.recommended,
-    unicorn.configs.recommended,
+    // `unopinionated` leaves out unicorn's style preferences; only rules about behavior and APIs remain.
+    unicorn.configs.unopinionated,
     ...(typeChecked ? createTypeCheckedConfigs(tsconfigRootDir) : []),
-    ...(react ? [reactHooks.configs.flat.recommended] : []),
+    ...createFrameworkConfigs({ react, next, vitest, testFiles }),
     {
       name: "golfo-lint/quality",
       languageOptions: { globals: { ...globals.node, ...globals.browser } },
@@ -231,6 +336,7 @@ export function createEslintConfig(options = {}) {
     ...(typeChecked ? [{ ...tseslint.configs.disableTypeChecked, files: JAVASCRIPT_FILE_GLOBS }] : []),
     ...(testFiles.length > 0 ? [{ name: "golfo-lint/tests", ...createTestFilesConfig(testFiles) }] : []),
     { name: "golfo-lint/config-files", files: CONFIG_FILE_GLOBS, rules: { "unicorn/no-top-level-side-effects": "off" } },
+    createDirectiveCommentsConfig(allowDisableComments),
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
-  ];
+  ]);
 }

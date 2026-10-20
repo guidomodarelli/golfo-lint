@@ -6,8 +6,14 @@ export interface EslintConfigOptions {
   tsconfigRootDir?: string;
   /** Whether to enable rules that need type information (default `true`). */
   typeChecked?: boolean;
-  /** Whether to enable the React hooks rules (default `false`). */
+  /** Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect` rules (default `false`). */
   react?: boolean;
+  /** Whether to enable the Next.js rules, Core Web Vitals included (default `false`). */
+  next?: boolean;
+  /** Whether to enable the Vitest rules in test files (default `false`). */
+  vitest?: boolean;
+  /** Whether `eslint-disable` comments may silence a rule, with a description (default `false`). */
+  allowDisableComments?: boolean;
   /** Extra globs to skip, besides dependencies and build output. */
   ignores?: string[];
   /** Globs of test files, which get relaxed limits. */

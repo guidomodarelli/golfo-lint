@@ -7,6 +7,9 @@ import { createEslintConfig, STYLISTIC_SUGGESTION_RULES } from "../../src/eslint
 
 const TYPED_FIXTURE_DIRECTORY = fileURLToPath(new URL("../fixtures/typed", import.meta.url));
 
+/** Code that silences a rule with a comment instead of fixing it, as an agent might. */
+const DISABLED_RULE_SNIPPET = "// eslint-disable-next-line eqeqeq\nexport const isEmpty = (value) => value == null;\n";
+
 /**
  * Creates an ESLint instance that uses only the shared preset, as a consumer's `eslint.config.js` would.
  * @param {import("../../src/eslint/index.js").EslintConfigOptions} options - Preset options.
@@ -36,24 +39,25 @@ async function lintSnippet(code) {
  * Lists the rules a file ends up with, with their metadata.
  * @param {import("../../src/eslint/index.js").EslintConfigOptions} options - Preset options.
  * @param {string} fileName - File of the typed fixture.
- * @returns {Promise<{ ruleName: string; type: string | undefined }[]>} Enabled rules.
+ * @returns {Promise<{ ruleName: string; type: string | undefined; severity: unknown }[]>} Enabled rules.
  */
 async function listEnabledRules(options, fileName) {
   const config = await createLinter(options).calculateConfigForFile(path.join(TYPED_FIXTURE_DIRECTORY, fileName));
   return Object.entries(config.rules)
     .filter(([, entry]) => (Array.isArray(entry) ? entry[0] : entry) !== 0)
-    .map(([ruleName]) => {
+    .map(([ruleName, entry]) => {
       const separatorIndex = ruleName.lastIndexOf("/");
       const pluginName = separatorIndex === -1 ? "@" : ruleName.slice(0, separatorIndex);
       const rule = config.plugins[pluginName]?.rules?.[ruleName.slice(separatorIndex + 1)];
-      return { ruleName, type: rule?.meta?.type };
+      const severity = Array.isArray(entry) ? entry[0] : entry;
+      return { ruleName, type: rule?.meta?.type, severity };
     });
 }
 
 describe("createEslintConfig", () => {
   for (const [label, options, fileName] of /** @type {const} */ ([
-    ["JavaScript", { typeChecked: false, react: true }, "snippet.js"],
-    ["TypeScript con tipos", { typeChecked: true, react: true }, "formatted-badly.ts"],
+    ["JavaScript", { typeChecked: false, react: true, next: true, vitest: true }, "snippet.js"],
+    ["TypeScript con tipos", { typeChecked: true, react: true, next: true }, "formatted-badly.ts"],
   ])) {
     it(`no habilita reglas de formato (${label})`, async () => {
       const enabledRules = await listEnabledRules(options, fileName);
@@ -107,7 +111,71 @@ describe("createEslintConfig", () => {
     const withReact = await listEnabledRules({ typeChecked: false, react: true }, "snippet.js");
     const withoutReact = await listEnabledRules({ typeChecked: false }, "snippet.js");
     assert.ok(withReact.some(({ ruleName }) => ruleName === "react-hooks/rules-of-hooks"));
-    assert.ok(withoutReact.every(({ ruleName }) => !ruleName.startsWith("react-hooks/")));
+    assert.ok(withReact.some(({ ruleName }) => ruleName === "jsx-a11y-x/alt-text"));
+    assert.ok(withoutReact.every(({ ruleName }) => !/^(?:react-hooks|jsx-a11y-x)\//.test(ruleName)));
+  });
+
+  it("con React, reporta imágenes sin texto alternativo", async () => {
+    const [result] = await createLinter({ typeChecked: false, react: true }).lintText(
+      'export const Avatar = () => <img src="avatar.png" />;\n',
+      { filePath: path.join(TYPED_FIXTURE_DIRECTORY, "avatar.jsx") },
+    );
+    assert.ok(result.messages.some((message) => message.ruleId === "jsx-a11y-x/alt-text"));
+  });
+
+  it("con React, reporta estado derivado calculado en un useEffect", async () => {
+    const [result] = await createLinter({ typeChecked: false, react: true }).lintText(
+      [
+        'import { useEffect, useState } from "react";',
+        "export function FullName({ first, last }) {",
+        '  const [fullName, setFullName] = useState("");',
+        "  useEffect(() => {",
+        '    setFullName([first, last].join(" "));',
+        "  }, [first, last]);",
+        "  return <p>{fullName}</p>;",
+        "}",
+        "",
+      ].join("\n"),
+      { filePath: path.join(TYPED_FIXTURE_DIRECTORY, "full-name.jsx") },
+    );
+    assert.ok(result.messages.some((message) => message.ruleId === "react-you-might-not-need-an-effect/no-derived-state"));
+  });
+
+  it("con Next.js, reporta <img> en lugar de next/image", async () => {
+    const enabledRules = await listEnabledRules({ typeChecked: false, react: true, next: true }, "snippet.js");
+    assert.ok(enabledRules.some(({ ruleName }) => ruleName === "@next/next/no-img-element"));
+  });
+
+  it("con Vitest, reporta tests enfocados y tests sin asserts", async () => {
+    const [result] = await createLinter({ typeChecked: false, vitest: true, testFiles: ["**/*.test.js"] }).lintText(
+      'import { it } from "vitest";\n\nit.only("calcula", () => {\n  Math.max(1, 2);\n});\n',
+      { filePath: path.join(TYPED_FIXTURE_DIRECTORY, "sum.test.js") },
+    );
+    const ruleIds = new Set(result.messages.map((message) => message.ruleId));
+    assert.ok(ruleIds.has("vitest/no-focused-tests"));
+    assert.ok(ruleIds.has("vitest/expect-expect"));
+  });
+
+  it("no deja reglas como advertencia: todo problema es un error", async () => {
+    const enabledRules = await listEnabledRules({ typeChecked: true, react: true, next: true }, "formatted-badly.ts");
+    assert.deepEqual(
+      enabledRules.filter(({ severity }) => severity !== 2).map(({ ruleName }) => ruleName),
+      [],
+    );
+  });
+
+  it("no deja silenciar reglas con comentarios", async () => {
+    const ruleIds = await lintSnippet(DISABLED_RULE_SNIPPET);
+    assert.ok(ruleIds.includes("eslint-comments/no-use"));
+  });
+
+  it("con allowDisableComments, exige explicar por qué se silencia una regla", async () => {
+    const [result] = await createLinter({ typeChecked: false, allowDisableComments: true }).lintText(
+      DISABLED_RULE_SNIPPET,
+      { filePath: path.join(TYPED_FIXTURE_DIRECTORY, "snippet.js") },
+    );
+    const ruleIds = result.messages.map((message) => message.ruleId);
+    assert.deepEqual(ruleIds, ["eslint-comments/require-description"]);
   });
 
   it("relaja los límites en los archivos de test", async () => {

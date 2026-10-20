@@ -7,21 +7,42 @@
 const LAYOUT_RULE_TYPE = "layout";
 
 /**
- * Rules that plugins do not type as `layout` but that only choose between equivalent spellings of the
- * same code (letter case, escapes, indentation inside templates, ordering).
+ * Rules that plugins do not type as `layout` but that only choose between equivalent spellings of the same
+ * code: letter case, escapes, `if` versus ternary or `switch`, `String.raw`, and similar syntax preferences.
+ * They change no behavior, so they only add churn to code written by agents.
  */
 export const STYLISTIC_SUGGESTION_RULES = [
+  "regexp/hexadecimal-escape",
+  "regexp/sort-alternatives",
+  "regexp/sort-flags",
+  "regexp/unicode-escape",
+  "unicorn/consistent-conditional-object-spread",
+  "unicorn/escape-case",
+  "unicorn/import-style",
+  "unicorn/no-hex-escape",
+  "unicorn/no-lonely-if",
+  "unicorn/no-negated-condition",
+  "unicorn/no-nested-ternary",
+  "unicorn/no-useless-undefined",
+  "unicorn/no-zero-fractions",
   "unicorn/number-literal-case",
   "unicorn/numeric-separators-style",
+  "unicorn/prefer-block-statement-over-iife",
+  "unicorn/prefer-class-fields",
+  "unicorn/prefer-identifier-import-export-specifiers",
+  "unicorn/prefer-logical-operator-over-ternary",
+  "unicorn/prefer-minimal-ternary",
+  "unicorn/prefer-optional-catch-binding",
+  "unicorn/prefer-short-escape-sequences",
+  "unicorn/prefer-string-raw",
+  "unicorn/prefer-switch",
+  "unicorn/prefer-ternary",
+  "unicorn/prefer-unary-minus",
+  "unicorn/prefer-unicode-code-point-escapes",
+  "unicorn/prefer-while-loop-condition",
+  "unicorn/relative-url-style",
   "unicorn/template-indent",
-  "unicorn/escape-case",
-  "unicorn/no-hex-escape",
   "unicorn/text-encoding-identifier-case",
-  "unicorn/no-nested-ternary",
-  "regexp/sort-flags",
-  "regexp/sort-alternatives",
-  "regexp/hexadecimal-escape",
-  "regexp/unicode-escape",
 ];
 
 /**

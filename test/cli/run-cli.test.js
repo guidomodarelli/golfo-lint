@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { LINT_COMMANDS } from "../../src/cli/commands.js";
+import { LINT_COMMANDS } from "../../src/cli/commands/index.js";
 import { EXIT_CODE_SUCCESS, EXIT_CODE_USAGE_ERROR } from "../../src/cli/constants.js";
 import { formatUsage, runCli } from "../../src/cli/run-cli.js";
 import { spawnTool } from "../../src/cli/spawn-tool.js";

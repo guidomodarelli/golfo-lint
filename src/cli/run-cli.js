@@ -1,10 +1,10 @@
 /** @module cli/run-cli Parses the `golfo-lint` arguments and runs one analysis subcommand. */
 import process from "node:process";
-import { LINT_COMMANDS } from "./commands.js";
+import { LINT_COMMANDS, runApplicableCommand } from "./commands/index.js";
 import { CLI_NAME, EXIT_CODE_SUCCESS, EXIT_CODE_USAGE_ERROR, HELP_FLAGS } from "./constants.js";
 import { spawnTool } from "./spawn-tool.js";
 
-/** @typedef {import("./commands.js").LintCommand} LintCommand */
+/** @typedef {import("./command-helpers.js").LintCommand} LintCommand */
 /** @typedef {import("./spawn-tool.js").ToolInvocation} ToolInvocation */
 
 /**
@@ -12,12 +12,12 @@ import { spawnTool } from "./spawn-tool.js";
  * @property {string} [cwd] - Folder to analyze; defaults to the current one.
  * @property {Record<string, LintCommand>} [commands] - Available subcommands, replaceable for tests.
  * @property {(invocation: ToolInvocation) => Promise<number>} [runTool] - Runs a tool; replaceable for tests.
- * @property {(message: string) => void} [log] - Receives the usage message.
+ * @property {(message: string) => void} [log] - Receives the usage message and informational messages.
  * @property {(message: string) => void} [warn] - Receives failure and usage messages.
  */
 
 /** Width of the first column of the usage message. */
-const USAGE_COLUMN_WIDTH = 12;
+const USAGE_COLUMN_WIDTH = 14;
 
 /**
  * Builds the usage message from the available subcommands.
@@ -62,5 +62,5 @@ export async function runCli(cliArguments, options = {}) {
     return EXIT_CODE_USAGE_ERROR;
   }
 
-  return command.run({ toolArguments, cwd, runTool, warn });
+  return runApplicableCommand(commandName, command, { toolArguments, cwd, runTool, log, warn });
 }

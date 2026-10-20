@@ -6,8 +6,10 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
-- Preset de ESLint (`@golfo/lint/eslint`) con reglas de calidad de ESLint, typescript-eslint, SonarJS, unicorn, import-x, promise, regexp y, opcionalmente, React hooks. No incluye ninguna regla de formato.
-- `golfo-lint duplicates`: busca código duplicado con jscpd.
-- `golfo-lint unused`: busca archivos, exports y dependencias sin uso con knip, con valores compartidos en `@golfo/lint/knip`.
-- `golfo-lint complexity`: busca funciones demasiado complejas, largas o con muchos parámetros con lizard, con los mismos límites que ESLint.
-- `golfo-lint all`: ejecuta los tres análisis y falla si alguno falla.
+- Preset de ESLint (`@golfo/lint/eslint`) para código escrito por agentes de IA, con reglas de calidad de ESLint, typescript-eslint, SonarJS, unicorn, import-x, promise y regexp. No incluye reglas de formato ni preferencias de estilo, reporta todo como error y prohíbe los comentarios `eslint-disable` (salvo con `allowDisableComments`, que exige explicarlos).
+- Opciones `react` (hooks, accesibilidad en JSX y `useEffect` innecesarios), `next` (Next.js y Core Web Vitals) y `vitest` (tests enfocados, salteados o sin asserts) en el preset de ESLint.
+- Configuración de Stylelint (`@golfo/lint/stylelint`) que solo detecta errores en CSS y SCSS, con nombres de clase BEM opcionales, y el comando `golfo-lint styles`.
+- Configuración de dependency-cruiser (`@golfo/lint/dependency-cruiser`) con ciclos, paquetes no declarados, devDependencies en producción y reglas de capas hexagonales, y el comando `golfo-lint architecture`.
+- `golfo-lint duplicates` (jscpd), `golfo-lint unused` (knip) y `golfo-lint complexity` (lizard, con los mismos límites que ESLint).
+- `golfo-lint package` (publint y Are the Types Wrong), `golfo-lint workflows` (actionlint y zizmor), `golfo-lint secrets` (gitleaks) y `golfo-lint monorepo` (sherif).
+- `golfo-lint all`: ejecuta todos los análisis que aplican al proyecto y falla si alguno falla.
