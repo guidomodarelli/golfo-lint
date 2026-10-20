@@ -20,6 +20,18 @@ const CSS_MODULES_PSEUDO_CLASSES = ["global", "local", "export", "import"];
 /** At-rules of Tailwind CSS 4, valid in the stylesheets Tailwind compiles. */
 const TAILWIND_AT_RULES = ["theme", "custom-variant", "utility", "variant", "source", "plugin", "config", "reference", "apply", "tailwind"];
 
+/**
+ * Rules of `stylelint-config-recommended-scss` that only choose how to write equivalent code: where a line breaks
+ * around an operator, how a `@use` path is spelled, empty `//` lines inside a comment block.
+ */
+const STYLISTIC_RECOMMENDED_RULES = [
+  "scss/comment-no-empty",
+  "scss/load-no-partial-leading-underscore",
+  "scss/load-partial-extension",
+  "scss/operator-no-newline-after",
+  "scss/operator-no-newline-before",
+];
+
 /** Deepest nesting of rules; deeper selectors are fragile and hard to override. */
 const MAX_STYLE_NESTING_DEPTH = 3;
 
@@ -40,7 +52,7 @@ export const BEM_CLASS_PATTERN = String.raw`^[A-Z][A-Za-z0-9]*(__[a-z][A-Za-z0-9
 
 /**
  * Builds the shared Stylelint config. Disable comments are ignored, so a rule can only be fixed, not silenced.
- * Specificity rules (no ids, no `!important`, no type-qualified selectors) apply only to CSS Modules: global
+ * Specificity rules (no ids, no `!important`) apply only to CSS Modules: global
  * stylesheets legitimately target `html.dark`, `#__next` or element defaults.
  * @param {StylelintConfigOptions} [options] - What the project uses.
  * @returns {import("stylelint").Config} Config to export from `stylelint.config.js`.
@@ -58,6 +70,7 @@ export function createStylelintConfig(options = {}) {
       "selector-max-compound-selectors": MAX_COMPOUND_SELECTORS,
       "selector-pseudo-class-no-unknown": [true, { ignorePseudoClasses: CSS_MODULES_PSEUDO_CLASSES }],
       "shorthand-property-no-redundant-values": true,
+      ...Object.fromEntries(STYLISTIC_RECOMMENDED_RULES.map((ruleName) => [ruleName, null])),
     },
     overrides: [
       {
@@ -66,7 +79,6 @@ export function createStylelintConfig(options = {}) {
           "declaration-no-important": true,
           "selector-class-pattern": bem ? BEM_CLASS_PATTERN : null,
           "selector-max-id": 0,
-          "selector-no-qualifying-type": true,
         },
       },
     ],

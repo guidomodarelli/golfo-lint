@@ -91,7 +91,7 @@ En los tests se relajan el largo de función, los callbacks anidados, los númer
 
 ## Stylelint
 
-`golfo-lint styles` analiza `**/*.{css,scss}`. Parte de `stylelint-config-recommended-scss`, que solo trae reglas que detectan errores, y suma: sin `!important`, sin ids, sin selectores calificados por etiqueta, anidamiento máximo de 3, hasta 4 selectores compuestos, sin propiedades redundantes y sin animaciones desconocidas. Los comentarios `stylelint-disable` se ignoran.
+`golfo-lint styles` analiza `**/*.{css,scss}`. Parte de `stylelint-config-recommended-scss`, que solo trae reglas que detectan errores, y suma: anidamiento máximo de 3, hasta 4 selectores compuestos y sin propiedades redundantes; en CSS Modules, además, sin `!important` ni ids (los estilos globales pueden usar `html.dark` o `#__next`). Acepta `:global` de CSS Modules y las at-rules de Tailwind 4, y apaga las reglas de estilo de `recommended-scss` (saltos de línea alrededor de operadores, cómo se escribe la ruta de un `@use`, líneas vacías en comentarios). Los comentarios `stylelint-disable` se ignoran.
 
 ```js
 // stylelint.config.js
@@ -139,7 +139,7 @@ Un `doctor.config.ts` del proyecto puede ajustar reglas. react-doctor usa una li
 
 - `golfo-lint package`, en paquetes publicables: publint en modo estricto y Are the Types Wrong sobre el resultado de `npm pack`, con el perfil `esm-only` cuando el paquete es ESM y no ofrece `require`.
 - `golfo-lint workflows`: actionlint (sintaxis, expresiones, scripts de shell) y zizmor (inyecciones, acciones sin fijar a un commit, credenciales persistidas), que falla desde la severidad media.
-- `golfo-lint secrets`: gitleaks sobre todo el historial de git, o sobre los archivos de la carpeta fuera de un repositorio. Los hallazgos se muestran redactados.
+- `golfo-lint secrets`: gitleaks sobre todo el historial de git, o sobre los archivos de la carpeta fuera de un repositorio, con todas sus reglas. La única excepción es la regla genérica `generic-api-key` en tests y Markdown, donde solo encuentra placeholders; las reglas de proveedores (GitHub, AWS, Stripe...) aplican en todos lados. Un `.gitleaks.toml` del proyecto reemplaza la configuración compartida. Los hallazgos se muestran redactados.
 - `golfo-lint monorepo`, con workspaces: sherif (versiones distintas de una dependencia, campos faltantes), sin su regla de ordenar dependencias.
 
 Sin argumentos, cada comando analiza la carpeta actual con los valores compartidos; los argumentos se pasan tal cual a la herramienta.

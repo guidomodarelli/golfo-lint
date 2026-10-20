@@ -6,7 +6,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { selectAttwProfile } from "../../package/select-attw-profile.js";
-import { createGitleaksArguments, GITLEAKS_CANDIDATES, GITLEAKS_VERSION } from "../../secrets/gitleaks-tool.js";
+import {
+  createGitleaksArguments,
+  GITLEAKS_CANDIDATES,
+  GITLEAKS_PROJECT_CONFIG_FILE,
+  GITLEAKS_VERSION,
+} from "../../secrets/gitleaks-tool.js";
 import {
   ACTIONLINT_CANDIDATES,
   createZizmorArguments,
@@ -109,7 +114,11 @@ export const secretsCommand = {
       installHint:
         `Instalá gitleaks ${GITLEAKS_VERSION} desde https://github.com/gitleaks/gitleaks/releases ` +
         "(o con winget install Gitleaks.Gitleaks / brew install gitleaks).",
-      arguments: createGitleaksArguments({ isGitRepository: hasAnyPath(context.cwd, [".git"]), path: "." }),
+      arguments: createGitleaksArguments({
+        isGitRepository: hasAnyPath(context.cwd, [".git"]),
+        hasProjectConfig: hasAnyPath(context.cwd, [GITLEAKS_PROJECT_CONFIG_FILE]),
+        path: ".",
+      }),
     });
   },
 };

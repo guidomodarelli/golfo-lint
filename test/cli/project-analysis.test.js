@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -173,6 +173,18 @@ describe("golfo-lint secrets", { skip: findExternalCommand(GITLEAKS_CANDIDATES) 
     writeFileSync(path.join(folder, "config.js"), `export const token = "${createFakeGithubToken()}";\n`);
     const { exitCode } = await runSilently("secrets", folder);
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("en tests no reporta claves genéricas de prueba, pero sí tokens de proveedores", async () => {
+    const folder = createTemporaryFolder();
+    const testsFolder = path.join(folder, "tests");
+    mkdirSync(testsFolder);
+    const placeholderKey = createFakeGithubToken().slice("ghp_".length);
+    writeFileSync(path.join(testsFolder, "client.test.js"), `const API_KEY = "${placeholderKey}";\n`);
+    assert.equal((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
+
+    writeFileSync(path.join(testsFolder, "token.test.js"), `const token = "${createFakeGithubToken()}";\n`);
+    assert.notEqual((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
   });
 
   it("pasa cuando no hay secretos", async () => {
