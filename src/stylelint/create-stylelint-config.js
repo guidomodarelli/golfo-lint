@@ -11,6 +11,15 @@ import { IGNORED_PATH_GLOBS } from "../shared/thresholds.js";
  */
 const RECOMMENDED_SCSS_CONFIG = fileURLToPath(import.meta.resolve("stylelint-config-recommended-scss"));
 
+/** CSS Modules files, where every selector is scoped to one component. */
+const CSS_MODULE_FILE_GLOBS = ["**/*.module.css", "**/*.module.scss"];
+
+/** Pseudo-classes CSS Modules adds to reach outside the module or export values. */
+const CSS_MODULES_PSEUDO_CLASSES = ["global", "local", "export", "import"];
+
+/** At-rules of Tailwind CSS 4, valid in the stylesheets Tailwind compiles. */
+const TAILWIND_AT_RULES = ["theme", "custom-variant", "utility", "variant", "source", "plugin", "config", "reference", "apply", "tailwind"];
+
 /** Deepest nesting of rules; deeper selectors are fragile and hard to override. */
 const MAX_STYLE_NESTING_DEPTH = 3;
 
@@ -31,6 +40,8 @@ export const BEM_CLASS_PATTERN = String.raw`^[A-Z][A-Za-z0-9]*(__[a-z][A-Za-z0-9
 
 /**
  * Builds the shared Stylelint config. Disable comments are ignored, so a rule can only be fixed, not silenced.
+ * Specificity rules (no ids, no `!important`, no type-qualified selectors) apply only to CSS Modules: global
+ * stylesheets legitimately target `html.dark`, `#__next` or element defaults.
  * @param {StylelintConfigOptions} [options] - What the project uses.
  * @returns {import("stylelint").Config} Config to export from `stylelint.config.js`.
  */
@@ -42,14 +53,22 @@ export function createStylelintConfig(options = {}) {
     ignoreFiles: [...IGNORED_PATH_GLOBS, ...ignoreFiles],
     rules: {
       "declaration-block-no-redundant-longhand-properties": true,
-      "declaration-no-important": true,
       "max-nesting-depth": [MAX_STYLE_NESTING_DEPTH, { ignore: ["pseudo-classes"], ignoreAtRules: ["media", "supports"] }],
-      "no-unknown-animations": true,
-      "selector-class-pattern": bem ? BEM_CLASS_PATTERN : null,
+      "scss/at-rule-no-unknown": [true, { ignoreAtRules: TAILWIND_AT_RULES }],
       "selector-max-compound-selectors": MAX_COMPOUND_SELECTORS,
-      "selector-max-id": 0,
-      "selector-no-qualifying-type": true,
+      "selector-pseudo-class-no-unknown": [true, { ignorePseudoClasses: CSS_MODULES_PSEUDO_CLASSES }],
       "shorthand-property-no-redundant-values": true,
     },
+    overrides: [
+      {
+        files: CSS_MODULE_FILE_GLOBS,
+        rules: {
+          "declaration-no-important": true,
+          "selector-class-pattern": bem ? BEM_CLASS_PATTERN : null,
+          "selector-max-id": 0,
+          "selector-no-qualifying-type": true,
+        },
+      },
+    ],
   };
 }

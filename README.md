@@ -83,7 +83,7 @@ ESLint y lizard usan los mismos límites por función:
 | Complejidad ciclomática | 10 |
 | Complejidad cognitiva (SonarJS) | 15 |
 | Líneas de código (sin vacías ni comentarios) | 80 |
-| Parámetros | 4 |
+| Parámetros (solo ESLint: lizard cuenta cada prop desestructurada como parámetro) | 4 |
 | Profundidad de bloques | 4 |
 | Callbacks anidados | 3 |
 

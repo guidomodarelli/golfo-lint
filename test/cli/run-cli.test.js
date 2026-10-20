@@ -60,6 +60,11 @@ describe("runCli", () => {
     assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("duplicated") }), EXIT_CODE_PROBLEMS_FOUND);
   });
 
+  it("duplicates no cuenta los tests duplicados", async () => {
+    const options = createSilentOptions();
+    assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("duplicated-tests") }), EXIT_CODE_SUCCESS);
+  });
+
   it("duplicates pasa cuando no hay código copiado", async () => {
     const options = createSilentOptions();
     assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("complex") }), EXIT_CODE_SUCCESS);

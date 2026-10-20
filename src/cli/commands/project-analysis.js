@@ -3,6 +3,8 @@
  * package (publint, attw), the GitHub Actions workflows (actionlint, zizmor), committed secrets (gitleaks) and
  * monorepo consistency (sherif).
  */
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { selectAttwProfile } from "../../package/select-attw-profile.js";
 import { createGitleaksArguments, GITLEAKS_CANDIDATES, GITLEAKS_VERSION } from "../../secrets/gitleaks-tool.js";
 import {
@@ -18,8 +20,11 @@ import { hasAnyPath, readProjectManifest, runExternalTool, runPackageBin, runSeq
 /** How to get uv, which runs the Python-packaged linters. */
 const UV_INSTALL_HINT = "Instalá uv (https://docs.astral.sh/uv/) para ejecutarlo con uvx.";
 
-/** Files that declare pnpm workspaces. */
+/** File where pnpm declares workspaces, and also settings that have nothing to do with them. */
 const PNPM_WORKSPACE_FILE = "pnpm-workspace.yaml";
+
+/** Top-level `packages:` key of `pnpm-workspace.yaml`, the one that lists workspaces. */
+const PNPM_WORKSPACE_PACKAGES_KEY = /^packages:/mu;
 
 /**
  * sherif rule that only asks to sort dependencies alphabetically: ordering, not quality.
@@ -45,7 +50,10 @@ function packageSkipReason(cwd) {
  * @returns {string | undefined} Reason to skip the monorepo checks.
  */
 function monorepoSkipReason(cwd) {
-  const declaresWorkspaces = readProjectManifest(cwd)?.workspaces !== undefined || hasAnyPath(cwd, [PNPM_WORKSPACE_FILE]);
+  const pnpmWorkspacePath = path.join(cwd, PNPM_WORKSPACE_FILE);
+  const declaresPnpmWorkspaces =
+    existsSync(pnpmWorkspacePath) && PNPM_WORKSPACE_PACKAGES_KEY.test(readFileSync(pnpmWorkspacePath, "utf8"));
+  const declaresWorkspaces = readProjectManifest(cwd)?.workspaces !== undefined || declaresPnpmWorkspaces;
   return declaresWorkspaces ? undefined : "no declara workspaces";
 }
 

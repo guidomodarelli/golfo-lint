@@ -111,6 +111,11 @@ describe("golfo-lint styles", () => {
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
   });
 
+  it("acepta Tailwind, :global de CSS Modules y selectores de documento en estilos globales", async () => {
+    const { exitCode } = await runSilently("styles", fixturePath("styles-valid"));
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+  });
+
   it("pasa cuando no hay archivos de estilos", async () => {
     const { exitCode } = await runSilently("styles", fixturePath("cycle"));
     assert.equal(exitCode, EXIT_CODE_SUCCESS);
@@ -134,6 +139,12 @@ describe("golfo-lint monorepo", () => {
   it("detecta versiones distintas de una dependencia entre workspaces", async () => {
     const { exitCode } = await runSilently("monorepo", fixturePath("monorepo"));
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("no aplica cuando pnpm-workspace.yaml solo tiene configuración", async () => {
+    const { exitCode, messages } = await runSilently("monorepo", fixturePath("settings-only-workspace"));
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+    assert.match(messages[0], /no aplica \(no declara workspaces\)/);
   });
 
   it("no aplica a proyectos sin workspaces", async () => {

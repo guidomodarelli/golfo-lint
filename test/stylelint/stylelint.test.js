@@ -31,6 +31,19 @@ describe("createStylelintConfig", () => {
     assert.ok(rules.includes("declaration-no-important"));
   });
 
+  it("en estilos globales acepta ids, selectores calificados y at-rules de Tailwind", async () => {
+    const { results } = await stylelint.lint({
+      code: "@theme { --accent: red; }\nhtml.dark { color-scheme: dark; }\n#__next { min-height: 100%; }\n",
+      codeFilename: "globals.scss",
+      config: createStylelintConfig(),
+    });
+    assert.deepEqual(results.flatMap((result) => result.warnings.map((warning) => warning.rule)), []);
+  });
+
+  it("acepta :global de CSS Modules", async () => {
+    assert.deepEqual(await lintScss(".Card { :global(.dark) & { color: white; } }\n"), []);
+  });
+
   it("ignora los comentarios que apagan reglas", async () => {
     const rules = await lintScss("/* stylelint-disable-next-line declaration-no-important */\n.Card { margin: 0 !important; }\n");
     assert.ok(rules.includes("declaration-no-important"));
