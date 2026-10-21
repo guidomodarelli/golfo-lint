@@ -27,10 +27,23 @@ Tres decisiones definen el paquete:
 ## Instalación
 
 ```bash
-pnpm add -D @golfo/lint eslint
+pnpm add -D --save-exact @golfo/lint eslint
 ```
 
-Requiere Node.js 22.13 o superior y ESLint 10. Las herramientas de npm vienen como dependencias. lizard, actionlint y zizmor se distribuyen como paquetes de Python: `golfo-lint` los ejecuta con `uvx` en versiones fijas, así que basta con tener [uv](https://docs.astral.sh/uv/). gitleaks es un binario de Go que hay que instalar (`winget install Gitleaks.Gitleaks`, `brew install gitleaks` o desde sus [releases](https://github.com/gitleaks/gitleaks/releases)).
+En proyectos con React, sumá react-doctor, que es opcional porque trae Playwright, Sentry y su propio TypeScript:
+
+```bash
+pnpm add -D --save-exact react-doctor@0.9.18
+```
+
+Con pnpm 12, aprobá el script de instalación de `unrs-resolver` (lo usa el resolver de TypeScript de import-x para verificar su binario nativo) en `pnpm-workspace.yaml`; si no, `pnpm install` falla:
+
+```yaml
+allowBuilds:
+  unrs-resolver: true
+```
+
+Requiere Node.js 22.13 o superior y ESLint 10. Las herramientas de npm vienen como dependencias, todas en versiones exactas: una versión nueva de un plugin puede sumar reglas que hagan fallar un proyecto que hoy pasa, así que se actualizan a propósito y validadas. lizard, actionlint y zizmor se distribuyen como paquetes de Python: `golfo-lint` los ejecuta con `uvx` en versiones fijas, así que basta con tener [uv](https://docs.astral.sh/uv/). gitleaks es un binario de Go que hay que instalar (`winget install Gitleaks.Gitleaks`, `brew install gitleaks` o desde sus [releases](https://github.com/gitleaks/gitleaks/releases)).
 
 ## ESLint
 
@@ -50,7 +63,7 @@ export default createEslintConfig({
 | --- | --- | --- |
 | `tsconfigRootDir` | carpeta actual | Carpeta del `tsconfig.json` raíz, para las reglas con tipos. |
 | `typeChecked` | `true` | Reglas que necesitan tipos: promesas sin esperar, `any` inseguro, condiciones innecesarias. |
-| `tsconfigFiles` | `[]` | Los tsconfig que cubren todos los archivos, por ejemplo `["tsconfig.json", "tsconfig.test.json"]`. Pasalos cuando el `tsconfig.json` raíz excluye los tests: si no, typescript-eslint arma un programa de TypeScript por cada test y el análisis pasa de minutos a horas. |
+| `tsconfigFiles` | detectado | Los tsconfig que cubren todos los archivos. Por defecto, `tsconfig.json` y `tsconfig.test.json` cuando existe el segundo: si el `tsconfig.json` raíz excluye los tests y nadie nombra el otro, typescript-eslint arma un programa de TypeScript por cada test y el análisis pasa de minutos a horas. Pasá la lista cuando los tsconfig tienen otros nombres, o `[]` para que el project service de typescript-eslint los busque. |
 | `react` | `false` | Hooks de React, accesibilidad en JSX y `useEffect` innecesarios. |
 | `next` | `false` | Reglas de Next.js, Core Web Vitals incluidas. |
 | `vitest` | `false` | En los tests: sin `.only` ni `.skip`, sin tests sin asserts, `expect` válidos. |
@@ -134,7 +147,7 @@ Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no
 
 ## react-doctor
 
-`golfo-lint react`, en proyectos que dependen de `react`, corre [react-doctor](https://github.com/millionco/react-doctor): unas 900 reglas de bugs, estado y efectos, rendimiento, seguridad, accesibilidad y mantenibilidad. Sus reglas de diseño visual vienen apagadas, porque el propio react-doctor las considera preferencias de una guía de diseño. `golfo-lint` lo ejecuta con:
+`golfo-lint react`, en proyectos que dependen de `react`, corre [react-doctor](https://github.com/millionco/react-doctor), instalado en el propio proyecto (si falta, termina con código 3 y dice cómo instalarlo): unas 900 reglas de bugs, estado y efectos, rendimiento, seguridad, accesibilidad y mantenibilidad. Sus reglas de diseño visual vienen apagadas, porque el propio react-doctor las considera preferencias de una guía de diseño. `golfo-lint` lo ejecuta con:
 
 - `--blocking warning`: las advertencias también fallan.
 - `--no-respect-inline-disables`: los comentarios que silencian reglas no tienen efecto.
@@ -166,6 +179,9 @@ Sin argumentos, cada comando analiza la carpeta actual con los valores compartid
 npm ci
 npm run ci
 node bin/golfo-lint.js all
+npm run check:packed-install
 ```
+
+`check:packed-install` empaqueta el paquete con `npm pack`, lo instala con pnpm en un proyecto de prueba temporal y verifica que el preset de ESLint, la config de Stylelint y cada subcomando encuentren sus plugins y ejecutables, como le pasaría a un proyecto real. Necesita pnpm y acceso al registry.
 
 Los tests ejecutan las herramientas reales sobre `test/fixtures`. Los que necesitan `uvx` o `gitleaks` se saltean si no están instalados; el CI instala los dos. Los releases se publican con `npm run create-version` (`@golfo/rp`). Las reglas para agentes que trabajan en este repositorio están en [AGENTS.md](AGENTS.md).

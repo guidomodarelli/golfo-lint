@@ -8,7 +8,8 @@ export interface EslintConfigOptions {
   typeChecked?: boolean;
   /**
    * TypeScript configs that cover every linted file, such as `["tsconfig.json", "tsconfig.test.json"]`. Pass them
-   * when the root `tsconfig.json` excludes tests; by default the typescript-eslint project service finds them.
+   * when the root `tsconfig.json` excludes tests. By default, `tsconfig.json` and `tsconfig.test.json` when the second
+   * exists; otherwise, or with `[]`, the typescript-eslint project service finds each file's config.
    */
   tsconfigFiles?: string[];
   /** Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect` rules (default `false`). */

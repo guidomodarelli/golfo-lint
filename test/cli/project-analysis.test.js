@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { REACT_DOCTOR_VERSION } from "../../src/cli/commands/code-analysis.js";
 import { EXIT_CODE_SUCCESS } from "../../src/cli/constants.js";
 import { runCli } from "../../src/cli/run-cli.js";
 import { spawnTool } from "../../src/cli/spawn-tool.js";
@@ -93,6 +94,12 @@ describe("golfo-lint architecture", () => {
 });
 
 describe("golfo-lint react", () => {
+  it("sugiere instalar la misma versión de react-doctor con la que se testea", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+    assert.equal(manifest.devDependencies["react-doctor"], REACT_DOCTOR_VERSION);
+    assert.equal(manifest.peerDependenciesMeta["react-doctor"].optional, true);
+  });
+
   it("detecta estado derivado e índices como key, aunque sean advertencias", async () => {
     const { exitCode } = await runSilently("react", fixturePath("react-project"));
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);

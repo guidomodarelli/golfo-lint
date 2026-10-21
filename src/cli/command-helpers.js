@@ -64,15 +64,20 @@ export function readProjectManifest(cwd) {
 /**
  * Runs an executable that a dependency of `@golfo/lint` ships, with the same Node.js that runs `golfo-lint`.
  * @param {CommandContext} context - Where and how to run it.
- * @param {{ packageName: string; binName: string; arguments: string[] }} tool - What to run.
+ * @param {{ packageName: string; binName: string; arguments: string[]; installedByProject?: boolean; installHint?: string }} tool
+ *   What to run. `installedByProject` searches the project first, for optional tools the project installs; `installHint`
+ *   says how to install the package when it is missing.
  * @returns {Promise<number>} Exit code of the tool.
  */
-export function runPackageBin(context, tool) {
-  return context.runTool({
-    command: process.execPath,
-    arguments: [resolvePackageBin(tool.packageName, tool.binName), ...tool.arguments],
-    cwd: context.cwd,
+export async function runPackageBin(context, tool) {
+  const binPath = resolvePackageBin(tool.packageName, tool.binName, {
+    projectDirectory: tool.installedByProject === true ? context.cwd : undefined,
   });
+  if (binPath === undefined) {
+    context.warn(`golfo-lint: ${tool.packageName} no está instalado. ${tool.installHint ?? "Reinstalá @golfo/lint."}`);
+    return EXIT_CODE_TOOL_UNAVAILABLE;
+  }
+  return context.runTool({ command: process.execPath, arguments: [binPath, ...tool.arguments], cwd: context.cwd });
 }
 
 /**

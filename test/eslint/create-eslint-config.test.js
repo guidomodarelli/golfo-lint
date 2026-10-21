@@ -139,6 +139,22 @@ describe("createEslintConfig", () => {
     );
   });
 
+  it("sin tsconfigFiles, usa tsconfig.json y tsconfig.test.json cuando existe el segundo", async () => {
+    const projectDirectory = fileURLToPath(new URL("../fixtures/typed-with-test-config", import.meta.url));
+    /** @param {import("../../src/eslint/index.js").EslintConfigOptions} options */
+    const parserProjectFor = async (options) => {
+      const linter = new ESLint({
+        cwd: projectDirectory,
+        overrideConfigFile: true,
+        overrideConfig: createEslintConfig({ tsconfigRootDir: projectDirectory, ...options }),
+      });
+      const config = await linter.calculateConfigForFile(path.join(projectDirectory, "total.test.ts"));
+      return config.languageOptions.parserOptions.project;
+    };
+    assert.deepEqual(await parserProjectFor({}), ["tsconfig.json", "tsconfig.test.json"]);
+    assert.equal(await parserProjectFor({ tsconfigFiles: [] }), undefined);
+  });
+
   it("habilita las reglas de hooks de React solo cuando se piden", async () => {
     const withReact = await listEnabledRules({ typeChecked: false, react: true }, "snippet.js");
     const withoutReact = await listEnabledRules({ typeChecked: false }, "snippet.js");

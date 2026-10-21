@@ -19,9 +19,28 @@ The rules in this package are read and acted on by AI coding agents, not by huma
 - **Shared limits.** Size and complexity limits live in `src/shared/thresholds.js` so ESLint and lizard flag the same functions; change them there.
 - Before adding a tool or rule, check that it works with the pinned runtimes (ESLint 10, Node.js from `.nvmrc`), that it is maintained, and that it does not duplicate a check the package already has. Document the choice in `README.md`.
 
+## Pinned versions
+
+Every tool runs at an exact version, because a new version of a linter or plugin can add rules that make a passing project fail, or style rules that break the policy above.
+
+- `dependencies` and `devDependencies` in `package.json` use exact versions, without `^` or `~`; `.npmrc` sets `save-exact=true` so `npm install <package>` keeps it that way. Update one tool at a time, rerun the validation below on TuTribu and agenda-mensual, and review what changed before committing.
+- `peerDependencies` keep ranges (`eslint`, and `react-doctor` as an optional peer): pinning a peer would force every project to that exact version. The version golfo-lint is tested with is the one in `devDependencies`.
+- Tools that npm cannot install are pinned in code; change them in these constants and in the CI workflow together:
+
+| Tool | Version | Where |
+| --- | --- | --- |
+| lizard | 1.24.1 | `LIZARD_VERSION` in `src/lizard/create-lizard-arguments.js` |
+| actionlint | 1.7.12 (`actionlint-py~=1.7.12.0`) | `ACTIONLINT_PY_REQUIREMENT` in `src/workflows/workflow-tools.js` |
+| zizmor | 1.31.1 | `ZIZMOR_VERSION` in `src/workflows/workflow-tools.js` |
+| gitleaks | 8.30.1 | `GITLEAKS_VERSION` in `src/secrets/gitleaks-tool.js` and `.github/workflows/ci.yml` |
+| react-doctor (optional peer) | 0.9.18 | `REACT_DOCTOR_VERSION` in `src/cli/commands/code-analysis.js` and `devDependencies` |
+| pnpm (packed install check) | 12.14.0 | `.github/workflows/ci.yml` |
+
+- GitHub Actions are pinned to a commit SHA with the tag as a comment (zizmor requires it).
+
 ## Validation
 
-- `npm run ci` runs ESLint with the package's own preset, the typecheck, the tests and `npm pack --dry-run`. `node bin/golfo-lint.js all` runs every analysis on the package itself. Both must pass before closing a change.
+- `npm run ci` runs ESLint with the package's own preset, the typecheck, the tests and `npm pack --dry-run`. `node bin/golfo-lint.js all` runs every analysis on the package itself. `npm run check:packed-install` installs the packed package with pnpm in a throwaway project and checks that every tool resolves; run it whenever dependencies, `exports` or the way a tool is located change. All three must pass before closing a change.
 - Tests run the real tools (ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, publint, attw, actionlint, zizmor, gitleaks, sherif) on `test/fixtures`; do not mock them. Tests that need `uvx` or `gitleaks` are skipped when the tool is missing, and CI installs both.
 - Never commit a real or realistic secret, not even in a fixture: tests that need one build it at runtime.
 

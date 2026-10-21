@@ -2,6 +2,8 @@
  * @module eslint/create-eslint-config Builds the shared ESLint flat config: rules that catch bugs, dead code,
  * complexity and unclear names, and never rules about formatting.
  */
+import { existsSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslintJs from "@eslint/js";
@@ -37,6 +39,12 @@ const TYPESCRIPT_FILE_GLOBS = ["**/*.{ts,tsx,mts,cts}"];
 
 /** Tool config files, whose job is the top-level side effect of exporting a computed config. */
 const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}"];
+
+/** Root TypeScript config of a project. */
+const ROOT_TSCONFIG_FILE = "tsconfig.json";
+
+/** TypeScript config that the golfo projects keep for tests, which the root config excludes. */
+const TEST_TSCONFIG_FILE = "tsconfig.test.json";
 
 /** Files written in JavaScript, which cannot get type-aware rules. */
 const JAVASCRIPT_FILE_GLOBS = ["**/*.{js,jsx,mjs,cjs}"];
@@ -126,7 +134,8 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * @property {string[]} [tsconfigFiles] - TypeScript configs that cover every linted file, relative to
  * `tsconfigRootDir` (for example `["tsconfig.json", "tsconfig.test.json"]`). Pass them when the root
  * `tsconfig.json` excludes files such as tests: otherwise typescript-eslint builds one program per excluded file,
- * which turns minutes into hours. Default `[]`: the typescript-eslint project service finds each file's config.
+ * which turns minutes into hours. By default, `tsconfig.json` and `tsconfig.test.json` when the second exists, and
+ * otherwise the typescript-eslint project service, which finds each file's config. `[]` forces the project service.
  * @property {boolean} [react] - Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect`
  * rules (default `false`).
  * @property {boolean} [next] - Whether to enable the Next.js rules, Core Web Vitals included (default `false`).
@@ -217,13 +226,27 @@ function createPluginRules() {
 }
 
 /**
+ * Chooses the TypeScript configs for type-aware rules when the project does not name them: the root config plus
+ * the test config, when there is one, so that tests do not each get their own program.
+ * @param {string} tsconfigRootDir - Folder that holds the root `tsconfig.json`.
+ * @returns {string[]} Configs to load, or none to let the project service find them.
+ */
+function detectTsconfigFiles(tsconfigRootDir) {
+  const hasTestConfig = existsSync(path.join(tsconfigRootDir, TEST_TSCONFIG_FILE));
+  return hasTestConfig && existsSync(path.join(tsconfigRootDir, ROOT_TSCONFIG_FILE))
+    ? [ROOT_TSCONFIG_FILE, TEST_TSCONFIG_FILE]
+    : [];
+}
+
+/**
  * Type-aware rules for TypeScript files, beyond `strictTypeChecked`.
- * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] }} typescriptProject - Where the TypeScript configs
- * are, and which ones to load (none: the project service finds them).
+ * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] | undefined }} typescriptProject - Where the
+ * TypeScript configs are, and which ones to load (`undefined`: detect them; none: the project service finds them).
  * @returns {FlatConfig[]} Config objects.
  */
 function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
-  const projectOptions = tsconfigFiles.length > 0 ? { project: tsconfigFiles } : { projectService: true };
+  const configFiles = tsconfigFiles ?? detectTsconfigFiles(tsconfigRootDir);
+  const projectOptions = configFiles.length > 0 ? { project: configFiles } : { projectService: true };
   return [
     ...tseslint.configs.strictTypeChecked.map((config) => ({ ...config, files: TYPESCRIPT_FILE_GLOBS })),
     {
@@ -354,11 +377,11 @@ function createTestFilesConfig(testFiles) {
  * @returns {FlatConfig[]} Flat config to export from `eslint.config.js`.
  */
 export function createEslintConfig(options = {}) {
-  /** @type {Required<EslintConfigOptions>} */
+  /** @type {Required<Omit<EslintConfigOptions, "tsconfigFiles">> & Pick<EslintConfigOptions, "tsconfigFiles">} */
   const defaults = {
     tsconfigRootDir: process.cwd(),
     typeChecked: true,
-    tsconfigFiles: [],
+    tsconfigFiles: undefined,
     react: false,
     next: false,
     vitest: false,

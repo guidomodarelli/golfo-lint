@@ -119,6 +119,12 @@ export const architectureCommand = {
   },
 };
 
+/**
+ * react-doctor version golfo-lint is tested with. It is an optional peer dependency (it brings Playwright, Sentry and
+ * its own TypeScript), so only React projects install it.
+ */
+export const REACT_DOCTOR_VERSION = "0.9.18";
+
 /** Dependency fields that can declare React. */
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
 
@@ -158,6 +164,8 @@ export const reactCommand = {
       packageName: "react-doctor",
       binName: "react-doctor",
       arguments: [...REACT_DOCTOR_ARGUMENTS, ...context.toolArguments],
+      installedByProject: true,
+      installHint: `Es opcional: instalalo en el proyecto con pnpm add -D --save-exact react-doctor@${REACT_DOCTOR_VERSION}`,
     });
   },
 };
