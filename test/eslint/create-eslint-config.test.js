@@ -3,12 +3,12 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
-import { createEslintConfig, STYLISTIC_SUGGESTION_RULES } from "../../src/eslint/index.js";
+import { createEslintConfig, DUPLICATED_RULES, STYLISTIC_SUGGESTION_RULES } from "../../src/eslint/index.js";
 
 const TYPED_FIXTURE_DIRECTORY = fileURLToPath(new URL("../fixtures/typed", import.meta.url));
 
 /** Code that silences a rule with a comment instead of fixing it, as an agent might. */
-const DISABLED_RULE_SNIPPET = "// eslint-disable-next-line eqeqeq\nexport const isEmpty = (value) => value == null;\n";
+const DISABLED_RULE_SNIPPET = "// eslint-disable-next-line eqeqeq\nexport const isZero = (value) => value == 0;\n";
 
 /**
  * Creates an ESLint instance that uses only the shared preset, as a consumer's `eslint.config.js` would.
@@ -63,11 +63,27 @@ describe("createEslintConfig", () => {
       const enabledRules = await listEnabledRules(options, fileName);
       assert.ok(enabledRules.length > 100, `se esperaban más de 100 reglas, hay ${enabledRules.length}`);
       const formattingRules = enabledRules.filter(
-        ({ ruleName, type }) => type === "layout" || STYLISTIC_SUGGESTION_RULES.includes(ruleName),
+        ({ ruleName, type }) =>
+          type === "layout" || STYLISTIC_SUGGESTION_RULES.includes(ruleName) || DUPLICATED_RULES.includes(ruleName),
       );
       assert.deepEqual(formattingRules, []);
     });
   }
+
+  it("exige palabras completas en lugar de abreviaturas, sin abreviar nombres completos", async () => {
+    const ruleIds = await lintSnippet(
+      "export function saveApplicationSettings(errMsg) {\n  return { message: errMsg };\n}\n",
+    );
+    assert.deepEqual(
+      ruleIds.filter((ruleId) => ruleId === "unicorn/name-replacements"),
+      ["unicorn/name-replacements"],
+    );
+  });
+
+  it("acepta == null, que cubre null y undefined a propósito", async () => {
+    const ruleIds = await lintSnippet("export const isMissing = (value) => value == null;\n");
+    assert.deepEqual(ruleIds, []);
+  });
 
   it("no reporta código correcto aunque esté mal formateado", async () => {
     const [result] = await createLinter({}).lintFiles(["formatted-badly.ts"]);
@@ -80,7 +96,7 @@ describe("createEslintConfig", () => {
         "export function parse(raw) {",
         "  try {",
         "    const v = JSON.parse(raw);",
-        "    return v == null ? undefined : v;",
+        "    return v == 0 ? undefined : v;",
         "  } catch (e) {",
         "    throw new Error(\"parse failed\", { cause: e });",
         "  }",
@@ -105,6 +121,14 @@ describe("createEslintConfig", () => {
     const [result] = await createLinter({}).lintFiles(["floating-promise.ts"]);
     const ruleIds = result.messages.map((message) => message.ruleId);
     assert.deepEqual(ruleIds, ["@typescript-eslint/no-floating-promises"]);
+  });
+
+  it("con tsconfigFiles, usa esos tsconfig para las reglas con tipos", async () => {
+    const [result] = await createLinter({ tsconfigFiles: ["tsconfig.json"] }).lintFiles(["floating-promise.ts"]);
+    assert.deepEqual(
+      result.messages.map((message) => message.ruleId),
+      ["@typescript-eslint/no-floating-promises"],
+    );
   });
 
   it("habilita las reglas de hooks de React solo cuando se piden", async () => {

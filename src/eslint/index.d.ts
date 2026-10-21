@@ -6,6 +6,11 @@ export interface EslintConfigOptions {
   tsconfigRootDir?: string;
   /** Whether to enable rules that need type information (default `true`). */
   typeChecked?: boolean;
+  /**
+   * TypeScript configs that cover every linted file, such as `["tsconfig.json", "tsconfig.test.json"]`. Pass them
+   * when the root `tsconfig.json` excludes tests; by default the typescript-eslint project service finds them.
+   */
+  tsconfigFiles?: string[];
   /** Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect` rules (default `false`). */
   react?: boolean;
   /** Whether to enable the Next.js rules, Core Web Vitals included (default `false`). */
@@ -30,3 +35,6 @@ export function listFormattingRules(
 
 /** Rules not typed `layout` that only choose between equivalent spellings of the same code. */
 export const STYLISTIC_SUGGESTION_RULES: string[];
+
+/** Rules that report a problem another enabled rule already reports; the preset turns them off. */
+export const DUPLICATED_RULES: string[];

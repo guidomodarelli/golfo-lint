@@ -28,7 +28,7 @@ import {
   MAX_NESTING_DEPTH,
   TEST_FILE_GLOBS,
 } from "../shared/thresholds.js";
-import { listFormattingRules, turnOffRules } from "./formatting-rules.js";
+import { DUPLICATED_RULES, listFormattingRules, turnOffRules } from "./formatting-rules.js";
 
 /** @typedef {import("eslint").Linter.Config} FlatConfig */
 
@@ -50,20 +50,53 @@ const SHORT_IDENTIFIER_EXCEPTIONS = ["i", "j", "k", "x", "y", "z", "_"];
 /** Numbers that never need a name: neutral elements, the last index and halving. */
 const ALLOWED_MAGIC_NUMBERS = [-1, 0, 1, 2];
 
-/** Abbreviations that frameworks impose (`props`, `params`, `ref`) and that unicorn would otherwise reject. */
-const ALLOWED_ABBREVIATIONS = {
-  args: true,
-  Args: true,
-  env: true,
-  Env: true,
-  params: true,
-  Params: true,
-  props: true,
-  Props: true,
-  ref: true,
-  Ref: true,
-  refs: true,
-  tsconfigRootDir: true,
+/**
+ * Abbreviations an agent must spell out, with the full words that replace them. The rule only expands: unicorn's
+ * own defaults also abbreviate (`application` into `app`), so they stay off. Abbreviations that frameworks impose
+ * (`props`, `params`, `ref`, `args`, `env`) and universal ones (`id`, `url`, `api`) are not listed.
+ */
+const ABBREVIATION_REPLACEMENTS = {
+  acc: { accumulator: true },
+  arr: { array: true },
+  attr: { attribute: true },
+  attrs: { attributes: true },
+  btn: { button: true },
+  cb: { callback: true },
+  cfg: { config: true },
+  cnt: { count: true },
+  ctx: { context: true },
+  cur: { current: true },
+  curr: { current: true },
+  dest: { destination: true },
+  dst: { destination: true },
+  e: { error: true, event: true },
+  el: { element: true },
+  elem: { element: true },
+  err: { error: true },
+  evt: { event: true },
+  fn: { function: true },
+  func: { function: true },
+  idx: { index: true },
+  len: { length: true },
+  mgr: { manager: true },
+  msg: { message: true },
+  num: { number: true },
+  obj: { object: true },
+  opt: { option: true },
+  opts: { options: true },
+  pkg: { package: true },
+  prev: { previous: true },
+  prop: { property: true },
+  qty: { quantity: true },
+  repo: { repository: true },
+  req: { request: true },
+  res: { response: true, result: true },
+  src: { source: true },
+  str: { string: true },
+  svc: { service: true },
+  temp: { temporary: true },
+  tmp: { temporary: true },
+  val: { value: true },
 };
 
 /**
@@ -90,6 +123,10 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * from `eslint.config.js`. Defaults to the current directory.
  * @property {boolean} [typeChecked] - Whether to enable rules that need type information (default `true`).
  * They are slower but catch floating promises, unsafe `any` and unnecessary conditions.
+ * @property {string[]} [tsconfigFiles] - TypeScript configs that cover every linted file, relative to
+ * `tsconfigRootDir` (for example `["tsconfig.json", "tsconfig.test.json"]`). Pass them when the root
+ * `tsconfig.json` excludes files such as tests: otherwise typescript-eslint builds one program per excluded file,
+ * which turns minutes into hours. Default `[]`: the typescript-eslint project service finds each file's config.
  * @property {boolean} [react] - Whether to enable the React hooks, JSX accessibility and unnecessary `useEffect`
  * rules (default `false`).
  * @property {boolean} [next] - Whether to enable the Next.js rules, Core Web Vitals included (default `false`).
@@ -111,7 +148,8 @@ function createCoreRules() {
     complexity: ["error", MAX_CYCLOMATIC_COMPLEXITY],
     curly: ["error", "all"],
     "default-case-last": "error",
-    eqeqeq: ["error", "always"],
+    // `== null` matches `null` and `undefined` on purpose; every other loose comparison is reported.
+    eqeqeq: ["error", "always", { null: "ignore" }],
     "id-length": ["error", { min: MIN_IDENTIFIER_LENGTH, exceptions: SHORT_IDENTIFIER_EXCEPTIONS, properties: "never" }],
     "max-depth": ["error", MAX_NESTING_DEPTH],
     "max-lines-per-function": ["error", { max: MAX_FUNCTION_LINES, skipBlankLines: true, skipComments: true }],
@@ -154,33 +192,44 @@ function createPluginRules() {
         ignoreTypeIndexes: true,
       },
     ],
-    "import-x/no-cycle": "error",
     "import-x/no-duplicates": "error",
     "import-x/no-mutable-exports": "error",
     "import-x/no-self-import": "error",
     "import-x/no-useless-path-segments": "error",
-    // TypeScript already reports unresolved imports and wrong default imports, with better messages.
+    // TypeScript already reports unresolved imports and missing or wrong named, default and namespace members,
+    // with better messages; these rules would repeat it and are the slowest of the preset.
+    "import-x/default": "off",
+    "import-x/named": "off",
+    "import-x/namespace": "off",
     "import-x/no-named-as-default": "off",
     "import-x/no-named-as-default-member": "off",
     "import-x/no-unresolved": "off",
+    // Cycles are checked for the whole repository by `golfo-lint architecture` (dependency-cruiser), much faster
+    // than this rule does it file by file.
+    "import-x/no-cycle": "off",
     "sonarjs/cognitive-complexity": ["error", MAX_COGNITIVE_COMPLEXITY],
     // Naming rules from unicorn's opinionated set: an agent that reads `error` and full words needs no guessing.
     "unicorn/catch-error-name": ["error", { name: "error" }],
-    "unicorn/name-replacements": ["error", { allowList: ALLOWED_ABBREVIATIONS, checkFilenames: false }],
+    "unicorn/name-replacements": [
+      "error",
+      { extendDefaultReplacements: false, replacements: ABBREVIATION_REPLACEMENTS, checkFilenames: false },
+    ],
   };
 }
 
 /**
  * Type-aware rules for TypeScript files, beyond `strictTypeChecked`.
- * @param {string} tsconfigRootDir - Folder that holds the root `tsconfig.json`.
+ * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] }} typescriptProject - Where the TypeScript configs
+ * are, and which ones to load (none: the project service finds them).
  * @returns {FlatConfig[]} Config objects.
  */
-function createTypeCheckedConfigs(tsconfigRootDir) {
+function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
+  const projectOptions = tsconfigFiles.length > 0 ? { project: tsconfigFiles } : { projectService: true };
   return [
     ...tseslint.configs.strictTypeChecked.map((config) => ({ ...config, files: TYPESCRIPT_FILE_GLOBS })),
     {
       files: TYPESCRIPT_FILE_GLOBS,
-      languageOptions: { parserOptions: { projectService: true, tsconfigRootDir } },
+      languageOptions: { parserOptions: { ...projectOptions, tsconfigRootDir } },
       rules: {
         "@typescript-eslint/consistent-type-imports": "error",
         "@typescript-eslint/prefer-nullish-coalescing": "error",
@@ -284,6 +333,8 @@ function createTestFilesConfig(testFiles) {
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
       "sonarjs/no-duplicate-string": "off",
+      // Tests replace `window` and `navigator` properties to simulate the browser.
+      "unicorn/no-global-object-property-assignment": "off",
     },
   };
 }
@@ -300,6 +351,7 @@ export function createEslintConfig(options = {}) {
   const defaults = {
     tsconfigRootDir: process.cwd(),
     typeChecked: true,
+    tsconfigFiles: [],
     react: false,
     next: false,
     vitest: false,
@@ -307,10 +359,8 @@ export function createEslintConfig(options = {}) {
     ignores: [],
     testFiles: TEST_FILE_GLOBS,
   };
-  const { tsconfigRootDir, typeChecked, react, next, vitest, allowDisableComments, ignores, testFiles } = {
-    ...defaults,
-    ...options,
-  };
+  const { tsconfigRootDir, typeChecked, tsconfigFiles, react, next, vitest, allowDisableComments, ignores, testFiles } =
+    { ...defaults, ...options };
 
   return promoteWarningsToErrors([
     { name: "golfo-lint/ignores", ignores: [...IGNORED_PATH_GLOBS, ...ignores] },
@@ -325,7 +375,7 @@ export function createEslintConfig(options = {}) {
     sonarjs.configs.recommended,
     // `unopinionated` leaves out unicorn's style preferences; only rules about behavior and APIs remain.
     unicorn.configs.unopinionated,
-    ...(typeChecked ? createTypeCheckedConfigs(tsconfigRootDir) : []),
+    ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) : []),
     ...createFrameworkConfigs({ react, next, vitest, testFiles }),
     {
       name: "golfo-lint/quality",
@@ -338,5 +388,6 @@ export function createEslintConfig(options = {}) {
     { name: "golfo-lint/config-files", files: CONFIG_FILE_GLOBS, rules: { "unicorn/no-top-level-side-effects": "off" } },
     createDirectiveCommentsConfig(allowDisableComments),
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
+    { name: "golfo-lint/no-duplicates", rules: turnOffRules(DUPLICATED_RULES) },
   ]);
 }

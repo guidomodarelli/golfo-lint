@@ -10,6 +10,8 @@ The rules in this package are read and acted on by AI coding agents, not by huma
   - Stylelint: extend `stylelint-config-recommended-scss` (errors only), never `stylelint-config-standard`.
   - sherif: `unordered-dependencies` stays ignored.
   - react-doctor: keep its `design` rules off (they are visual preferences); run it with `--blocking warning` and `--no-respect-inline-disables`.
+- **One finding, one rule.** When two enabled rules report the same problem, keep one and add the other to `DUPLICATED_RULES` in `src/eslint/formatting-rules.js`, with a comment naming the rule that stays. Prefer the faster tool when two of them overlap (cycles: dependency-cruiser, not `import-x/no-cycle`), and leave to TypeScript what it already checks.
+- **Validate against real projects.** Before adding a plugin or preset, run it on TuTribu and agenda-mensual and review what it reports: a rule that mostly flags valid code, or only asks for another spelling, does not belong here.
 - **Every problem is an error.** Agents act on failures and ignore warnings, so no rule is left as `warn`: `promoteWarningsToErrors` turns them into errors, dependency-cruiser rules use `severity: "error"`, and tests check it.
 - **No silencing.** Agents must fix the code, not hide the finding: the ESLint preset forbids directive comments (`eslint-comments/no-use`) unless a project opts into `allowDisableComments`, which still requires a description; Stylelint uses `ignoreDisables`; react-doctor runs with `--no-respect-inline-disables`.
 - **Nothing leaves the machine.** Tools run without telemetry or uploads (react-doctor with `--no-telemetry --no-supply-chain`).
