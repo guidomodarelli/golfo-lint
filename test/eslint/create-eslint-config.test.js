@@ -124,7 +124,15 @@ describe("createEslintConfig", () => {
   });
 
   it("con tsconfigFiles, usa esos tsconfig para las reglas con tipos", async () => {
-    const [result] = await createLinter({ tsconfigFiles: ["tsconfig.json"] }).lintFiles(["floating-promise.ts"]);
+    // Its own fixture: typescript-eslint caches programs per tsconfig, and in CI (single run) a program the
+    // project service built for another test would be reused.
+    const projectDirectory = fileURLToPath(new URL("../fixtures/typed-project", import.meta.url));
+    const linter = new ESLint({
+      cwd: projectDirectory,
+      overrideConfigFile: true,
+      overrideConfig: createEslintConfig({ tsconfigRootDir: projectDirectory, tsconfigFiles: ["tsconfig.json"] }),
+    });
+    const [result] = await linter.lintFiles(["floating-promise.ts"]);
     assert.deepEqual(
       result.messages.map((message) => message.ruleId),
       ["@typescript-eslint/no-floating-promises"],
