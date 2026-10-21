@@ -1,4 +1,5 @@
 /** @module jscpd/create-jscpd-arguments Defaults for jscpd, the copy/paste detector. */
+import { expandBraces } from "../shared/expand-braces.js";
 import { IGNORED_PATH_GLOBS, TEST_FILE_GLOBS } from "../shared/thresholds.js";
 
 /** Fewest tokens a repeated block needs to count as a clone: below this, repetition is idiomatic code. */
@@ -22,7 +23,8 @@ export const JSCPD_DEFAULTS = {
   minLines: MIN_CLONE_LINES,
   threshold: MAX_DUPLICATION_PERCENT,
   format: CHECKED_FORMATS,
-  ignore: [...IGNORED_PATH_GLOBS, ...TEST_FILE_GLOBS],
+  // jscpd splits `--ignore` on commas, so brace groups have to be expanded first.
+  ignore: [...IGNORED_PATH_GLOBS, ...TEST_FILE_GLOBS].flatMap((glob) => expandBraces(glob)),
   reporters: ["console"],
   exitCode: EXIT_CODE_CLONES_FOUND,
 };

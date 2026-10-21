@@ -1,0 +1,7 @@
+{
+  "name": "broken-package-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": { ".": { "types": "./missing.d.ts", "default": "./missing.js" } },
+  "files": ["index.js"]
+}

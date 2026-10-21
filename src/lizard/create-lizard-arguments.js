@@ -2,7 +2,7 @@
  * @module lizard/create-lizard-arguments Defaults for lizard, the cyclomatic complexity analyzer. It uses the
  * same limits as the ESLint preset, so both tools flag the same functions.
  */
-import { MAX_CYCLOMATIC_COMPLEXITY, MAX_FUNCTION_LINES, MAX_FUNCTION_PARAMETERS } from "../shared/thresholds.js";
+import { MAX_CYCLOMATIC_COMPLEXITY, MAX_FUNCTION_LINES } from "../shared/thresholds.js";
 
 /** lizard version run through `uvx` when lizard is not installed. */
 export const LIZARD_VERSION = "1.24.1";
@@ -29,11 +29,14 @@ const EXCLUDED_PATH_PATTERNS = [
   "*.spec.*",
 ];
 
-/** Limits that `golfo-lint complexity` enforces per function. */
+/**
+ * Limits that `golfo-lint complexity` enforces per function. There is no parameter limit: lizard counts each
+ * destructured property as a parameter, so a React component that takes one `props` object would fail. ESLint's
+ * `max-params` checks parameters instead.
+ */
 export const LIZARD_DEFAULTS = {
   maxCyclomaticComplexity: MAX_CYCLOMATIC_COMPLEXITY,
   maxLinesOfCode: MAX_FUNCTION_LINES,
-  maxParameters: MAX_FUNCTION_PARAMETERS,
   languages: ANALYZED_LANGUAGES,
   exclude: EXCLUDED_PATH_PATTERNS,
 };
@@ -51,8 +54,6 @@ export function createLizardArguments(overrides = {}) {
     String(config.maxCyclomaticComplexity),
     "--Threshold",
     `nloc=${String(config.maxLinesOfCode)}`,
-    "--arguments",
-    String(config.maxParameters),
     ...config.languages.flatMap((language) => ["--languages", language]),
     ...config.exclude.flatMap((pattern) => ["--exclude", pattern]),
   ];

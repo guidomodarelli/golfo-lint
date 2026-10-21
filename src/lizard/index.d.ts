@@ -2,7 +2,6 @@
 export interface LizardDefaults {
   maxCyclomaticComplexity: number;
   maxLinesOfCode: number;
-  maxParameters: number;
   languages: string[];
   /** Paths to skip, as `fnmatch` patterns. */
   exclude: string[];

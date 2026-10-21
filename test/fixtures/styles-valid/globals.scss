@@ -1,0 +1,11 @@
+@theme {
+  --color-accent: oklch(60% 0.2 250);
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+#__next {
+  min-height: 100%;
+}

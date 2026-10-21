@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { LINT_COMMANDS } from "../../src/cli/commands.js";
+import { LINT_COMMANDS } from "../../src/cli/commands/index.js";
 import { EXIT_CODE_SUCCESS, EXIT_CODE_USAGE_ERROR } from "../../src/cli/constants.js";
 import { formatUsage, runCli } from "../../src/cli/run-cli.js";
 import { spawnTool } from "../../src/cli/spawn-tool.js";
@@ -58,6 +58,11 @@ describe("runCli", () => {
   it("duplicates detecta código copiado con jscpd", async () => {
     const options = createSilentOptions();
     assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("duplicated") }), EXIT_CODE_PROBLEMS_FOUND);
+  });
+
+  it("duplicates no cuenta los tests duplicados", async () => {
+    const options = createSilentOptions();
+    assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("duplicated-tests") }), EXIT_CODE_SUCCESS);
   });
 
   it("duplicates pasa cuando no hay código copiado", async () => {

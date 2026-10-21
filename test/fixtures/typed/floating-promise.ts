@@ -1,10 +1,10 @@
-async function saveRecord(record: string): Promise<string> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+type PersistRecord = (record: string) => Promise<void>;
+
+async function saveRecord(record: string, persist: PersistRecord): Promise<string> {
+  await persist(record);
   return record;
 }
 
-export function storeRecord(record: string): void {
-  saveRecord(record);
+export function storeRecord(record: string, persist: PersistRecord): void {
+  saveRecord(record, persist);
 }

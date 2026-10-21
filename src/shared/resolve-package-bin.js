@@ -1,4 +1,7 @@
-/** @module shared/resolve-package-bin Finds the executable of a package installed next to `@golfo/lint`. */
+/**
+ * @module shared/resolve-package-bin Finds the executable of an installed package, without depending on what its
+ * `exports` expose (jscpd has no importable entry, knip hides `package.json`).
+ */
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -6,6 +9,9 @@ import { fileURLToPath } from "node:url";
 
 /** File that names a package and declares its executables. */
 const PACKAGE_MANIFEST_FILE = "package.json";
+
+/** This module, the default place to search from: the dependencies of `@golfo/lint`. */
+const GOLFO_LINT_LOCATION = fileURLToPath(import.meta.url);
 
 /**
  * @typedef {object} PackageManifest
@@ -23,47 +29,38 @@ function readManifest(manifestPath) {
 }
 
 /**
- * Walks up from the entry file of a package to the folder that holds its `package.json`. Works for packages
- * whose `exports` hide `package.json`.
+ * Finds the folder of a package installed in one of the `node_modules` folders Node.js would search from a file.
  * @param {string} packageName - Package to find.
- * @returns {string} Package folder.
+ * @param {string} fromFile - File the search starts from.
+ * @returns {string | undefined} Package folder, or `undefined` when it is not installed there.
  */
-function findPackageRootFromEntry(packageName) {
-  const entryPath = fileURLToPath(import.meta.resolve(packageName));
-  let directory = path.dirname(entryPath);
-  while (directory !== path.dirname(directory)) {
-    const manifestPath = path.join(directory, PACKAGE_MANIFEST_FILE);
-    if (existsSync(manifestPath) && readManifest(manifestPath).name === packageName) {
-      return directory;
-    }
-    directory = path.dirname(directory);
-  }
-  throw new Error(`resolvePackageBin: no se encontró el package.json de ${packageName} desde ${entryPath}.`);
+function findPackageRoot(packageName, fromFile) {
+  const searchedFolders = createRequire(fromFile).resolve.paths(packageName) ?? [];
+  return searchedFolders
+    .map((nodeModulesFolder) => path.join(nodeModulesFolder, packageName))
+    .find((packageFolder) => existsSync(path.join(packageFolder, PACKAGE_MANIFEST_FILE)));
 }
 
 /**
- * Finds the folder of an installed package: through its `package.json` when `exports` allows it, through its
- * entry file otherwise (some packages, like jscpd, have no importable entry; others, like knip, hide
- * `package.json`).
- * @param {string} packageName - Package to find.
- * @returns {string} Package folder.
- */
-function findPackageRoot(packageName) {
-  try {
-    return path.dirname(createRequire(import.meta.url).resolve(`${packageName}/${PACKAGE_MANIFEST_FILE}`));
-  } catch {
-    return findPackageRootFromEntry(packageName);
-  }
-}
-
-/**
- * Resolves the absolute path of an executable that a dependency of `@golfo/lint` declares in `bin`.
- * @param {string} packageName - Dependency that declares the executable.
+ * Resolves the absolute path of an executable a package declares in `bin`.
+ * @param {string} packageName - Package that declares the executable.
  * @param {string} binName - Executable name, as declared in `bin`.
- * @returns {string} Absolute path of the executable script, to run with `node`.
+ * @param {{ projectDirectory?: string }} [options] - With `projectDirectory`, the project's own installation is
+ * searched first: for optional tools, such as react-doctor, that the project installs itself.
+ * @returns {string | undefined} Absolute path of the executable script, to run with `node`, or `undefined` when
+ * the package is not installed.
  */
-export function resolvePackageBin(packageName, binName) {
-  const packageRoot = findPackageRoot(packageName);
+export function resolvePackageBin(packageName, binName, options = {}) {
+  const searchOrigins = [
+    ...(options.projectDirectory === undefined ? [] : [path.join(options.projectDirectory, PACKAGE_MANIFEST_FILE)]),
+    GOLFO_LINT_LOCATION,
+  ];
+  const packageRoot = searchOrigins
+    .map((origin) => findPackageRoot(packageName, origin))
+    .find((root) => root !== undefined);
+  if (packageRoot === undefined) {
+    return undefined;
+  }
   const { bin } = readManifest(path.join(packageRoot, PACKAGE_MANIFEST_FILE));
   const binPath = typeof bin === "string" ? bin : bin?.[binName];
   if (binPath === undefined) {

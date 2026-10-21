@@ -10,6 +10,6 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["bin", "src", "test", "types", "eslint.config.js", "knip.config.js", "golfo-rp.config.js"],
+  "include": ["bin", "scripts", "src", "test", "types", "eslint.config.js", "knip.config.js", "stylelint.config.js", "golfo-rp.config.js"],
   "exclude": ["test/fixtures"]
 }

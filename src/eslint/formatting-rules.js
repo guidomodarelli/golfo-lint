@@ -1,27 +1,134 @@
 /**
- * @module eslint/formatting-rules Finds the rules that only decide how code looks, so the preset never
- * enables them: formatting belongs to a formatter (Prettier, Biome, oxfmt), not to the linter.
+ * @module eslint/formatting-rules Lists the rules the preset never enables: formatting, syntax preferences and
+ * rules that duplicate another one. Formatting belongs to a formatter (Prettier, Biome, oxfmt), and a choice
+ * between two equivalent spellings of the same code only adds churn to code written by agents.
  */
 
 /** Rule type that ESLint reserves for whitespace, semicolons, commas and other layout concerns. */
 const LAYOUT_RULE_TYPE = "layout";
 
 /**
- * Rules that plugins do not type as `layout` but that only choose between equivalent spellings of the
- * same code (letter case, escapes, indentation inside templates, ordering).
+ * Rules that plugins do not type as `layout` but that only choose between equivalent spellings of the same
+ * code. They change no behavior. Plugin types do not separate them (some are `problem`), so they are listed.
  */
 export const STYLISTIC_SUGGESTION_RULES = [
-  "unicorn/number-literal-case",
-  "unicorn/numeric-separators-style",
-  "unicorn/template-indent",
+  // Regular expressions: equivalent ways to write the same pattern (`[^\d]` or `\D`, `{1,}` or `+`).
+  "regexp/control-character-escape",
+  "regexp/hexadecimal-escape",
+  "regexp/match-any",
+  "regexp/negation",
+  "regexp/no-trivially-nested-quantifier",
+  "regexp/no-useless-character-class",
+  "regexp/no-useless-escape",
+  "regexp/no-useless-non-capturing-group",
+  "regexp/no-useless-two-nums-quantifier",
+  "regexp/prefer-character-class",
+  "regexp/prefer-d",
+  "regexp/prefer-plus-quantifier",
+  "regexp/prefer-predefined-assertion",
+  "regexp/prefer-question-quantifier",
+  "regexp/prefer-range",
+  "regexp/prefer-set-operation",
+  "regexp/prefer-star-quantifier",
+  "regexp/prefer-unicode-codepoint-escapes",
+  "regexp/prefer-w",
+  "regexp/simplify-set-operations",
+  "regexp/sort-alternatives",
+  "regexp/sort-flags",
+  "regexp/unicode-escape",
+  "regexp/use-ignore-case",
+  // SonarJS: type and test layout preferences.
+  "sonarjs/parameterized-tests",
+  "sonarjs/redundant-type-aliases",
+  "sonarjs/use-type-alias",
+  "sonarjs/void-use",
+  // unicorn: control flow written another way (`if` or ternary, `.then` or `await`, early return or `else`).
+  "unicorn/consistent-conditional-object-spread",
+  "unicorn/no-declarations-before-early-exit",
+  "unicorn/no-lonely-if",
+  "unicorn/no-negated-array-predicate",
+  "unicorn/no-negated-condition",
+  "unicorn/no-nested-ternary",
+  "unicorn/no-subtraction-comparison",
+  "unicorn/no-typeof-undefined",
+  "unicorn/no-useless-undefined",
+  "unicorn/prefer-await",
+  "unicorn/prefer-block-statement-over-iife",
+  "unicorn/prefer-boolean-return",
+  "unicorn/prefer-default-parameters",
+  "unicorn/prefer-early-return",
+  "unicorn/prefer-logical-operator-over-ternary",
+  "unicorn/prefer-math-min-max",
+  "unicorn/prefer-minimal-ternary",
+  "unicorn/prefer-optional-catch-binding",
+  "unicorn/prefer-switch",
+  "unicorn/prefer-ternary",
+  "unicorn/prefer-top-level-await",
+  "unicorn/prefer-while-loop-condition",
+  // unicorn: one API spelled another way (`window` or `globalThis`, `replace(/x/g)` or `replaceAll`, `forEach`).
+  "unicorn/consistent-compound-words",
+  "unicorn/import-style",
+  "unicorn/no-for-each",
+  "unicorn/no-unnecessary-global-this",
+  "unicorn/prefer-add-event-listener-options",
+  "unicorn/prefer-array-from-map",
+  "unicorn/prefer-at",
+  "unicorn/prefer-class-fields",
+  "unicorn/prefer-direct-iteration",
+  "unicorn/prefer-global-number-constants",
+  "unicorn/prefer-global-this",
+  "unicorn/prefer-identifier-import-export-specifiers",
+  "unicorn/prefer-object-define-properties",
+  "unicorn/prefer-promise-with-resolvers",
+  "unicorn/prefer-response-static-json",
+  "unicorn/prefer-split-limit",
+  "unicorn/prefer-string-repeat",
+  "unicorn/prefer-string-replace-all",
+  "unicorn/prefer-url-href",
+  "unicorn/relative-url-style",
+  // `Number(value)` and `Number.parseFloat(value)` differ on `""` and `"12px"`: rewriting one as the other is
+  // not a safe fix.
+  "unicorn/prefer-number-coercion",
+  // unicorn: literals written another way (letter case, escapes, separators, `1.0`).
   "unicorn/escape-case",
   "unicorn/no-hex-escape",
+  "unicorn/no-zero-fractions",
+  "unicorn/number-literal-case",
+  "unicorn/numeric-separators-style",
+  "unicorn/prefer-short-escape-sequences",
+  "unicorn/prefer-string-raw",
+  "unicorn/prefer-unary-minus",
+  "unicorn/prefer-unicode-code-point-escapes",
+  "unicorn/template-indent",
   "unicorn/text-encoding-identifier-case",
-  "unicorn/no-nested-ternary",
-  "regexp/sort-flags",
-  "regexp/sort-alternatives",
-  "regexp/hexadecimal-escape",
-  "regexp/unicode-escape",
+  // promise: the name of the executor parameters, and returning from a `then` callback that has nothing to return.
+  "promise/always-return",
+  "promise/param-names",
+  // Braces around a one-statement `if`, `readonly` on props React never mutates, `crypto` or `node:crypto`,
+  // `.some((item) => item === value)` or `.includes(value)`, `< 0` or `=== -1`.
+  "curly",
+  "sonarjs/prefer-read-only-props",
+  "unicorn/consistent-existence-index-check",
+  "unicorn/prefer-includes",
+  "unicorn/prefer-node-protocol",
+];
+
+/**
+ * Rules that report a problem another enabled rule already reports. An agent would get the same finding twice
+ * under two names; the comment says which rule stays.
+ */
+export const DUPLICATED_RULES = [
+  // `no-nested-ternary` stays.
+  "sonarjs/no-nested-conditional",
+  "unicorn/no-unnecessary-nested-ternary",
+  // `@typescript-eslint/no-deprecated` stays.
+  "sonarjs/deprecation",
+  // `regexp/no-dupe-characters-character-class` stays.
+  "sonarjs/duplicates-in-character-class",
+  // `regexp/no-super-linear-backtracking` and `sonarjs/super-linear-regex` stay: they find different cases.
+  // `unicorn/prefer-boolean-return` is a syntax preference, so neither stays.
+  "sonarjs/prefer-single-boolean-return",
+  // `import-x/no-cycle` and dependency-cruiser's `no-circular` both stay: one in the editor, one per repository.
 ];
 
 /**
@@ -42,11 +149,13 @@ export function listFormattingRules(pluginsByPrefix) {
       .filter(([, rule]) => rule.meta?.type === LAYOUT_RULE_TYPE)
       .map(([ruleName]) => `${prefix}/${ruleName}`),
   );
-  return [...new Set([...layoutRules, ...STYLISTIC_SUGGESTION_RULES])].toSorted((leftRule, rightRule) => leftRule.localeCompare(rightRule));
+  return [...new Set([...layoutRules, ...STYLISTIC_SUGGESTION_RULES])].toSorted((leftRule, rightRule) =>
+    leftRule.localeCompare(rightRule),
+  );
 }
 
 /**
- * Builds the rule entries that turn formatting rules off.
+ * Builds the rule entries that turn rules off.
  * @param {string[]} ruleNames - Rules to turn off.
  * @returns {Record<string, "off">} Rule entries for a flat config.
  */
