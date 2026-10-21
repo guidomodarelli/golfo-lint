@@ -101,8 +101,16 @@ export const STYLISTIC_SUGGESTION_RULES = [
   "unicorn/prefer-unicode-code-point-escapes",
   "unicorn/template-indent",
   "unicorn/text-encoding-identifier-case",
-  // promise: the name of the executor parameters.
+  // promise: the name of the executor parameters, and returning from a `then` callback that has nothing to return.
+  "promise/always-return",
   "promise/param-names",
+  // Braces around a one-statement `if`, `readonly` on props React never mutates, `crypto` or `node:crypto`,
+  // `.some((item) => item === value)` or `.includes(value)`, `< 0` or `=== -1`.
+  "curly",
+  "sonarjs/prefer-read-only-props",
+  "unicorn/consistent-existence-index-check",
+  "unicorn/prefer-includes",
+  "unicorn/prefer-node-protocol",
 ];
 
 /**

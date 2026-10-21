@@ -146,7 +146,6 @@ function createCoreRules() {
   return {
     "array-callback-return": "error",
     complexity: ["error", MAX_CYCLOMATIC_COMPLEXITY],
-    curly: ["error", "all"],
     "default-case-last": "error",
     // `== null` matches `null` and `undefined` on purpose; every other loose comparison is reported.
     eqeqeq: ["error", "always", { null: "ignore" }],
@@ -236,6 +235,12 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         "@typescript-eslint/prefer-optional-chain": "error",
         "@typescript-eslint/switch-exhaustiveness-check": "error",
         "@typescript-eslint/only-throw-error": "error",
+        // `onClick={() => setOpen(true)}` returns nothing anyone reads; only longer bodies are confusing.
+        "@typescript-eslint/no-confusing-void-expression": ["error", { ignoreArrowShorthand: true }],
+        // A number in a template literal formats as expected; objects, `null` and `undefined` still fail.
+        "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
+        // Next.js requires `async` on Server Actions and lets Server Components be `async` without `await`.
+        "@typescript-eslint/require-await": "off",
       },
     },
   ];
@@ -329,6 +334,8 @@ function createTestFilesConfig(testFiles) {
     files: testFiles,
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
+      // `expect(service.save).toHaveBeenCalled()` reads a method without calling it, which is how mocks are asserted.
+      "@typescript-eslint/unbound-method": "off",
       "@typescript-eslint/no-magic-numbers": "off",
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
