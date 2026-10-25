@@ -12,6 +12,7 @@ import {
   unusedCommand,
 } from "./code-analysis.js";
 import { monorepoCommand, packageCommand, secretsCommand, workflowsCommand } from "./project-analysis.js";
+import { reactScanCommand } from "./react-scan.js";
 
 /** @typedef {import("../command-helpers.js").LintCommand} LintCommand */
 /** @typedef {import("../command-helpers.js").CommandContext} CommandContext */
@@ -60,5 +61,13 @@ const allCommand = {
   },
 };
 
+/**
+ * Subcommands that set up a development tool instead of analyzing, so `all` leaves them out.
+ * @type {Record<string, LintCommand>}
+ */
+const SETUP_COMMANDS = {
+  "react-scan": reactScanCommand,
+};
+
 /** @type {Record<string, LintCommand>} */
-export const LINT_COMMANDS = { ...ANALYSIS_COMMANDS, all: allCommand };
+export const LINT_COMMANDS = { ...ANALYSIS_COMMANDS, all: allCommand, ...SETUP_COMMANDS };

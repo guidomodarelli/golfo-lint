@@ -6,7 +6,14 @@ import { fileURLToPath } from "node:url";
 import { createJscpdArguments } from "../../jscpd/create-jscpd-arguments.js";
 import { createLizardArguments, LIZARD_VERSION } from "../../lizard/create-lizard-arguments.js";
 import { LIZARD_CANDIDATES } from "../../lizard/find-lizard-command.js";
-import { hasAnyPath, readProjectManifest, runExternalTool, runPackageBin, withDefaultPath } from "../command-helpers.js";
+import {
+  dependsOnReact,
+  hasAnyPath,
+  readProjectManifest,
+  runExternalTool,
+  runPackageBin,
+  withDefaultPath,
+} from "../command-helpers.js";
 import { JSCPD_PROJECT_CONFIG_FILE } from "../constants.js";
 
 /** @typedef {import("../command-helpers.js").LintCommand} LintCommand */
@@ -125,9 +132,6 @@ export const architectureCommand = {
  */
 export const REACT_DOCTOR_VERSION = "0.9.18";
 
-/** Dependency fields that can declare React. */
-const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
-
 /**
  * react-doctor flags for agents: warnings fail, inline suppressions are neutralized, and nothing leaves the
  * machine (no telemetry, no score API, no dependency list sent to Socket.dev).
@@ -141,19 +145,6 @@ const REACT_DOCTOR_ARGUMENTS = [
   "--no-telemetry",
   "--no-supply-chain",
 ];
-
-/**
- * Checks whether a project depends on React.
- * @param {string} cwd - Project folder.
- * @returns {boolean} Whether `package.json` declares `react` in any dependency field.
- */
-function dependsOnReact(cwd) {
-  const manifest = readProjectManifest(cwd);
-  return DEPENDENCY_FIELDS.some((field) => {
-    const dependencies = manifest?.[field];
-    return typeof dependencies === "object" && dependencies !== null && "react" in dependencies;
-  });
-}
 
 /** @type {LintCommand} */
 export const reactCommand = {

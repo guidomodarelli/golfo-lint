@@ -5,6 +5,7 @@
 The rules in this package are read and acted on by AI coding agents, not by humans. Every rule, tool and default must serve that audience:
 
 - **Only rules that detect real defects.** A rule belongs here when it catches a bug, dead code, excessive complexity, duplicated code, an unclear name, an accessibility problem, invalid or fragile CSS, a broken published package, a broken or insecure GitHub Actions workflow, a committed secret, a violated architecture boundary or an inconsistent monorepo.
+  - The one exception is react-scan (`golfo-lint react-scan` and `@golfo/lint/react-scan`), added because the user decided it: a tool that measures re-renders while the app runs in development and finds no defect. It never runs in CI or in production bundles, is not part of `golfo-lint all` and never makes a check fail. It does not open the door to other measurement tools, and every other rule below still applies to it: exact version, installed from the local package (never a CDN), and nothing leaves the machine (`startReactScan()` sets `window.__REACT_GRAB__` so react-scan does not query react-grab.com).
 - **No formatting or style preferences.** Never enable rules about whitespace, indentation, quotes, semicolons, line breaks, letter case of literals, import or key ordering, or choices between equivalent spellings of the same code (`if` versus ternary, `String.raw`, `return;` versus `return undefined;`). They change no behavior and only add churn. Formatting belongs to a formatter.
   - ESLint: `listFormattingRules` turns off every rule typed `layout` in the plugins the preset uses, plus `STYLISTIC_SUGGESTION_RULES` in `src/eslint/formatting-rules.js`. When adding a plugin, add it to `PLUGINS_BY_PREFIX` and add its style-only rules to that list. unicorn is used through `unopinionated`, not `recommended`.
   - Stylelint: extend `stylelint-config-recommended-scss` (errors only), never `stylelint-config-standard`.
@@ -24,7 +25,7 @@ The rules in this package are read and acted on by AI coding agents, not by huma
 Every tool runs at an exact version, because a new version of a linter or plugin can add rules that make a passing project fail, or style rules that break the policy above.
 
 - `dependencies` and `devDependencies` in `package.json` use exact versions, without `^` or `~`; `.npmrc` sets `save-exact=true` so `npm install <package>` keeps it that way. Update one tool at a time, rerun the validation below on TuTribu and agenda-mensual, and review what changed before committing.
-- `peerDependencies` keep ranges (`eslint`, and `react-doctor` as an optional peer): pinning a peer would force every project to that exact version. The version golfo-lint is tested with is the one in `devDependencies`.
+- `peerDependencies` keep ranges (`eslint`, and `react-doctor` and `react-scan` as optional peers): pinning a peer would force every project to that exact version. The version golfo-lint is tested with is the one in `devDependencies`.
 - Tools that npm cannot install are pinned in code; change them in these constants and in the CI workflow together:
 
 | Tool | Version | Where |
@@ -34,6 +35,7 @@ Every tool runs at an exact version, because a new version of a linter or plugin
 | zizmor | 1.31.1 | `ZIZMOR_VERSION` in `src/workflows/workflow-tools.js` |
 | gitleaks | 8.30.1 | `GITLEAKS_VERSION` in `src/secrets/gitleaks-tool.js` and `.github/workflows/ci.yml` |
 | react-doctor (optional peer) | 0.9.18 | `REACT_DOCTOR_VERSION` in `src/cli/commands/code-analysis.js` and `devDependencies` |
+| react-scan (optional peer) | 0.5.7 | `REACT_SCAN_VERSION` in `src/cli/react-scan/install-react-scan.js` and `devDependencies` |
 | pnpm (packed install check) | 12.14.0 | `.github/workflows/ci.yml` |
 
 - GitHub Actions are pinned to a commit SHA with the tag as a comment (zizmor requires it).

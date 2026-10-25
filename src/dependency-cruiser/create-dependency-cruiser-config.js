@@ -10,8 +10,17 @@ const PRODUCTION_CODE_PATH = String.raw`^(src|app|components|lib|hooks|bin)/`;
 /** Test files and folders. */
 const TEST_CODE_PATH = String.raw`(^|/)(test|tests|__tests__|e2e)/|\.(test|spec)\.[cm]?[jt]sx?$`;
 
-/** Folders of generated or installed code that are never cruised. */
-const EXCLUDED_PATH = String.raw`(^|/)(node_modules|dist|build|out|coverage|\.next|\.turbo|\.vercel)/`;
+/**
+ * `@golfo/lint/react-scan`, the only devDependency production code may import: it loads react-scan only in
+ * development, and production bundles drop that import.
+ */
+const DEVELOPMENT_ONLY_PACKAGE_PATH = "/@golfo/lint/src/react-scan/";
+
+/**
+ * Folders of generated code that are never cruised. `node_modules` is not one of them: excluding it would also drop
+ * the dependencies on packages, which the package rules check; `doNotFollow` keeps their insides out.
+ */
+const EXCLUDED_PATH = String.raw`(^|/)(dist|build|out|coverage|\.next|\.turbo|\.vercel)/`;
 
 /**
  * @typedef {object} ForbiddenRule
@@ -65,7 +74,7 @@ const BASE_RULES = /** @type {ForbiddenRule[]} */ ([
     severity: "error",
     comment: "El código de producción importa una devDependency, que no se instala en producción.",
     from: { path: PRODUCTION_CODE_PATH, pathNot: TEST_CODE_PATH },
-    to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"] },
+    to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"], pathNot: DEVELOPMENT_ONLY_PACKAGE_PATH },
   },
   {
     name: "not-to-test",
