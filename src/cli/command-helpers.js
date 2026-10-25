@@ -61,6 +61,31 @@ export function readProjectManifest(cwd) {
   return /** @type {Record<string, unknown>} */ (JSON.parse(readFileSync(manifestPath, "utf8")));
 }
 
+/** Dependency fields where a project declares the packages it uses. */
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
+
+/**
+ * Checks whether a manifest declares a package in any dependency field.
+ * @param {Record<string, unknown> | undefined} manifest - Parsed `package.json`.
+ * @param {string} packageName - Package to look for.
+ * @returns {boolean} Whether it is declared.
+ */
+export function declaresDependency(manifest, packageName) {
+  return DEPENDENCY_FIELDS.some((field) => {
+    const dependencies = manifest?.[field];
+    return typeof dependencies === "object" && dependencies !== null && packageName in dependencies;
+  });
+}
+
+/**
+ * Checks whether a project depends on React.
+ * @param {string} cwd - Project folder.
+ * @returns {boolean} Whether `package.json` declares `react` in any dependency field.
+ */
+export function dependsOnReact(cwd) {
+  return declaresDependency(readProjectManifest(cwd), "react");
+}
+
 /**
  * Runs an executable that a dependency of `@golfo/lint` ships, with the same Node.js that runs `golfo-lint`.
  * @param {CommandContext} context - Where and how to run it.

@@ -70,6 +70,33 @@ function createTemporaryFolder() {
   return folder;
 }
 
+/** Files of the published `@golfo/lint/react-scan` entry, copied into the `node_modules` of test projects. */
+const REACT_SCAN_HELPER_FILES = ["src/react-scan/index.js", "src/react-scan/index.d.ts"];
+
+/**
+ * Creates a project whose `src/main.js` imports installed packages: a `dev-tool` package, and `@golfo/lint` with its
+ * real manifest and `react-scan` entry, so dependency-cruiser resolves them as in an app.
+ * @param {Record<string, unknown>} manifest - Fields of the project's `package.json`, such as `devDependencies`.
+ * @param {string} mainSource - Content of `src/main.js`.
+ * @returns {string} Project folder.
+ */
+function createProjectWithPackages(manifest, mainSource) {
+  const folder = createTemporaryFolder();
+  const golfoLintFolder = path.join(folder, "node_modules/@golfo/lint");
+  const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+  for (const relativePath of ["package.json", ...REACT_SCAN_HELPER_FILES]) {
+    mkdirSync(path.dirname(path.join(golfoLintFolder, relativePath)), { recursive: true });
+    writeFileSync(path.join(golfoLintFolder, relativePath), readFileSync(path.join(packageRoot, relativePath)));
+  }
+  mkdirSync(path.join(folder, "node_modules/dev-tool"), { recursive: true });
+  writeFileSync(path.join(folder, "node_modules/dev-tool/package.json"), JSON.stringify({ name: "dev-tool", main: "index.js" }));
+  writeFileSync(path.join(folder, "node_modules/dev-tool/index.js"), "export {};\n");
+  mkdirSync(path.join(folder, "src"));
+  writeFileSync(path.join(folder, "src/main.js"), mainSource);
+  writeFileSync(path.join(folder, "package.json"), JSON.stringify({ name: "app", type: "module", ...manifest }));
+  return folder;
+}
+
 after(() => {
   for (const folder of temporaryFolders) {
     rmSync(folder, { recursive: true, force: true });
@@ -89,6 +116,27 @@ describe("golfo-lint architecture", () => {
 
   it("pasa cuando las dependencias respetan las reglas", async () => {
     const { exitCode } = await runSilently("architecture", fixturePath("knip-project"));
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("detecta código de producción que importa una devDependency", async () => {
+    const project = createProjectWithPackages({ devDependencies: { "dev-tool": "1.0.0" } }, 'import "dev-tool";\n');
+    const { exitCode } = await runSilently("architecture", project);
+    assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("detecta paquetes que no están en package.json", async () => {
+    const project = createProjectWithPackages({}, 'import "dev-tool";\n');
+    const { exitCode } = await runSilently("architecture", project);
+    assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("deja que el código de la app importe @golfo/lint/react-scan, aunque sea una devDependency", async () => {
+    const project = createProjectWithPackages(
+      { devDependencies: { "@golfo/lint": "0.0.0", "dev-tool": "1.0.0" } },
+      'import { startReactScan } from "@golfo/lint/react-scan";\n\nstartReactScan();\n',
+    );
+    const { exitCode } = await runSilently("architecture", project);
     assert.equal(exitCode, EXIT_CODE_SUCCESS);
   });
 });

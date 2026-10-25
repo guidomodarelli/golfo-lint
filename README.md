@@ -21,8 +21,9 @@ Tres decisiones definen el paquete:
 | Workflows de GitHub Actions | actionlint y zizmor | — | `golfo-lint workflows` |
 | Secretos en archivos o en el historial | gitleaks | — | `golfo-lint secrets` |
 | Versiones y `package.json` de un monorepo | sherif | — | `golfo-lint monorepo` |
+| React en desarrollo: qué componentes se re-renderizan (medición, no análisis) | react-scan | `@golfo/lint/react-scan` | `golfo-lint react-scan` |
 
-`golfo-lint all` ejecuta todos los análisis que aplican al proyecto (por ejemplo, `package` se saltea en paquetes privados y `monorepo` sin workspaces) y falla si alguno falla.
+`golfo-lint all` ejecuta todos los análisis que aplican al proyecto (por ejemplo, `package` se saltea en paquetes privados y `monorepo` sin workspaces) y falla si alguno falla. `golfo-lint react-scan` no forma parte de `all`: no analiza, conecta una herramienta de medición.
 
 ## Instalación
 
@@ -155,6 +156,34 @@ Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no
 
 Un `doctor.config.ts` del proyecto puede ajustar reglas. react-doctor usa una licencia MIT modificada que pide permiso para usarlo como datos de entrenamiento de IA o para venderlo como servicio; usarlo como linter no está restringido.
 
+## react-scan
+
+[react-scan](https://github.com/aidenybai/react-scan) (MIT) resalta en la página los componentes que se re-renderizan, para medir renders de más mientras se desarrolla. No detecta defectos ni falla: corre solo en desarrollo (`next dev`, `vite`), nunca en CI ni en producción.
+
+`golfo-lint react-scan`, en proyectos que dependen de `react`:
+
+1. Si `package.json` no declara `react-scan`, lo instala como devDependency en la versión exacta con la que se testea golfo-lint (`react-scan@0.5.7`), con el package manager del proyecto (el campo `packageManager` o el lockfile, también el del monorepo).
+2. Agrega al principio del archivo que arranca la app en el navegador:
+
+   ```ts
+   import { startReactScan } from "@golfo/lint/react-scan";
+
+   startReactScan();
+   ```
+
+   En Next.js 15.3 o posterior (App Router y Pages Router) es `instrumentation-client.ts` (o `.js`), en la raíz o en `src/`, que crea si no existe; en Vite, el módulo que carga `index.html`.
+3. Muestra el diff de cada archivo que cambió. Es idempotente: si el archivo ya inicia react-scan, o lo carga por su cuenta, no lo toca.
+
+Si no detecta Next.js 15.3 o posterior ni Vite, no cambia nada, termina con código 4 y explica cómo conectarlo a mano: las mismas dos líneas en el entry del cliente del bundler. No usa `npx react-scan init`, que carga el script desde unpkg sin versión fija, en Vite no lo limita a desarrollo y ofrece instalar `react-doctor@latest`.
+
+`startReactScan(options)` recibe las opciones de `scan()` de react-scan. Solo actúa en el navegador cuando `process.env.NODE_ENV === "development"`; en producción, en el servidor y en tests no hace nada. Importa react-scan del paquete instalado (nunca de un CDN) con un `import()` dinámico dentro de esa comparación, que Next.js (webpack y Turbopack) y Vite reemplazan por una constante: sus builds de producción no incluyen react-scan (verificado con `next build`, `next build --webpack` y `vite build`). Antes de iniciarlo define `window.__REACT_GRAB__`, porque sin esa marca react-scan consulta la última versión de react-grab en react-grab.com cada vez que arranca; como efecto, se desactiva su atajo Cmd/Ctrl+C para copiar el elemento inspeccionado.
+
+react-scan pide cargarse antes que React. Un `import()` dinámico no lo cumple: React DOM ya se evaluó cuando react-scan llega, así que su renderer no queda registrado en el hook de DevTools. En desarrollo igual ve cada render, porque Fast Refresh (Next.js y Vite) instala ese hook antes que React; medido en Next.js 16 (App y Pages Router, webpack y Turbopack) y Vite 8, react-scan muestra su barra y reporta los renders. A cambio, la lógica de desarrollo vive en golfo-lint y cada proyecto solo tiene esas dos líneas.
+
+`@golfo/lint/react-scan` es la única devDependency que el código de producción puede importar sin que `golfo-lint architecture` lo marque, porque el import desaparece de los builds de producción. Como el código de la app importa `@golfo/lint`, el build tiene que correr con las devDependencies instaladas, como ya pasa con TypeScript o Vite.
+
+Para sacarlo: borrá esas dos líneas (o el `instrumentation-client` que creó, si no tenía otra cosa) y desinstalá `react-scan`.
+
 ## Paquetes, workflows, secretos y monorepos
 
 - `golfo-lint package`, en paquetes publicables: publint en modo estricto y Are the Types Wrong sobre el resultado de `npm pack`, con el perfil `esm-only` cuando el paquete es ESM y no ofrece `require`.
@@ -172,6 +201,7 @@ Sin argumentos, cada comando analiza la carpeta actual con los valores compartid
 | 1 o más | El análisis encontró problemas (cada herramienta usa su propio código). |
 | 2 | Análisis desconocido o sin análisis. |
 | 3 | No se pudo ejecutar la herramienta. |
+| 4 | `golfo-lint react-scan` no encontró dónde conectar react-scan y no cambió nada. |
 
 ## Desarrollo
 

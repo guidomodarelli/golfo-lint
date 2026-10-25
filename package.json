@@ -1,7 +1,7 @@
 {
   "name": "@golfo/lint",
   "version": "0.0.0",
-  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
+  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, react-scan (solo en desarrollo), publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
   "type": "module",
   "license": "MIT",
   "author": "Guido Modarelli",
@@ -23,6 +23,7 @@
     "lizard",
     "publint",
     "react-doctor",
+    "react-scan",
     "stylelint",
     "zizmor"
   ],
@@ -54,6 +55,10 @@
       "types": "./src/dependency-cruiser/index.d.ts",
       "default": "./src/dependency-cruiser/index.js"
     },
+    "./react-scan": {
+      "types": "./src/react-scan/index.d.ts",
+      "default": "./src/react-scan/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -82,10 +87,14 @@
   },
   "peerDependencies": {
     "eslint": "^10.4.0",
-    "react-doctor": "^0.9.18"
+    "react-doctor": "^0.9.18",
+    "react-scan": "^0.5.7"
   },
   "peerDependenciesMeta": {
     "react-doctor": {
+      "optional": true
+    },
+    "react-scan": {
       "optional": true
     }
   },
@@ -119,6 +128,7 @@
     "@golfo/rp": "2.0.0",
     "@types/node": "24.19.2",
     "eslint": "10.13.0",
-    "react-doctor": "0.9.18"
+    "react-doctor": "0.9.18",
+    "react-scan": "0.5.7"
   }
 }

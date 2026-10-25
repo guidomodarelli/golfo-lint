@@ -29,6 +29,9 @@ const STYLELINT_EXIT_CODE_PROBLEMS_FOUND = 2;
 /** Exit code of `golfo-lint` when the tool it needs is not installed. */
 const EXIT_CODE_TOOL_UNAVAILABLE = 3;
 
+/** Exit code of `golfo-lint react-scan` when it cannot tell where to connect react-scan. */
+const EXIT_CODE_SETUP_NOT_DETECTED = 4;
+
 /** Characters of a failed command's output shown in the report: the end, where tools print the problems. */
 const REPORTED_OUTPUT_CHARACTERS = 2000;
 
@@ -61,6 +64,8 @@ const CONSUMER_FILES = {
     "",
   ].join("\n"),
   "src/card.module.scss": ".Card {\n  margin: 0 !important;\n}\n",
+  // Production code may import the react-scan entry, a devDependency, which `architecture` must allow.
+  "src/start-react-scan.js": 'import { startReactScan } from "@golfo/lint/react-scan";\n\nstartReactScan();\n',
   // pnpm 12 fails on unapproved install scripts; unrs-resolver's checks its native binary, as TuTribu approves it.
   "pnpm-workspace.yaml": "allowBuilds:\n  unrs-resolver: true\n",
 };
@@ -155,6 +160,17 @@ const EXPECTED_RESULTS = /** @type {ExpectedResult[]} */ ([
     commandArguments: ["golfo-lint", "react"],
     exitCode: EXIT_CODE_TOOL_UNAVAILABLE,
     outputIncludes: "react-doctor@",
+  },
+  {
+    label: "@golfo/lint/react-scan se importa sin react-scan instalado y no hace nada fuera de desarrollo",
+    commandArguments: ["node", "src/start-react-scan.js"],
+    exitCode: 0,
+  },
+  {
+    label: "golfo-lint react-scan explica cómo conectarlo a mano si no detecta el framework",
+    commandArguments: ["golfo-lint", "react-scan"],
+    exitCode: EXIT_CODE_SETUP_NOT_DETECTED,
+    outputIncludes: "@golfo/lint/react-scan",
   },
   {
     label: "golfo-lint package no aplica a un paquete privado",

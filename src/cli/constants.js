@@ -20,3 +20,6 @@ export const EXIT_CODE_USAGE_ERROR = 2;
 
 /** Exit code of a run that could not start the tool it needs. */
 export const EXIT_CODE_TOOL_UNAVAILABLE = 3;
+
+/** Exit code of a setup command that could not tell where to connect its tool, so it changed nothing. */
+export const EXIT_CODE_SETUP_NOT_DETECTED = 4;
