@@ -4,6 +4,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-25
+
 ### Added
 
 - Preset de ESLint (`@golfo/lint/eslint`) para código escrito por agentes de IA, con reglas de calidad de ESLint, typescript-eslint, SonarJS, unicorn, import-x, promise y regexp. No incluye reglas de formato ni preferencias de estilo, reporta todo como error y prohíbe los comentarios `eslint-disable` (salvo con `allowDisableComments`, que exige explicarlos).
