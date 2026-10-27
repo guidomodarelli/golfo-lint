@@ -168,6 +168,9 @@ export const NON_DEFECT_RULES = [
   "sonarjs/no-os-command-from-path",
   "sonarjs/os-command",
   "sonarjs/pseudo-random",
+  // Reassigning a variable that an event handler or callback changed after an `await`: the rule assumes nothing
+  // else writes it. It is also one of the slowest rules of the preset.
+  "sonarjs/no-redundant-assignments",
   // `new Promise((resolve) => setTimeout(resolve, ms))` returns the timer id, which nobody reads.
   "no-promise-executor-return",
   // Scripts that export their functions so tests can import them.

@@ -68,6 +68,7 @@ export default createEslintConfig({
 | `react` | `false` | Hooks de React, accesibilidad en JSX y `useEffect` innecesarios. |
 | `next` | `false` | Reglas de Next.js, Core Web Vitals incluidas. |
 | `vitest` | `false` | En los tests: sin `.only` ni `.skip`, sin tests sin asserts, `expect` válidos. |
+| `awsCdk` | `false` | Reglas `sonarjs/aws-*`, que revisan infraestructura escrita con `aws-cdk-lib`. Sin AWS CDK no pueden reportar nada y se llevan cerca de una décima parte del tiempo del lint. |
 | `allowDisableComments` | `false` | Permite `eslint-disable`, siempre con una explicación. |
 | `ignores` | `[]` | Globs extra a ignorar, además de dependencias y build. |
 | `testFiles` | rutas de test comunes | Archivos de test, con límites relajados. |
@@ -85,6 +86,7 @@ Qué incluye:
 - Con `react`: **react-hooks**, **jsx-a11y** (el fork `eslint-plugin-jsx-a11y-x`, porque el original todavía no soporta ESLint 10) y **react-you-might-not-need-an-effect**.
 - Con `next`: **@next/eslint-plugin-next** `core-web-vitals`.
 - Con `vitest`: **@vitest/eslint-plugin** `recommended`, más `no-standalone-expect`, `require-to-throw-message` y `valid-title`.
+- Con `awsCdk`: las reglas `sonarjs/aws-*` del `recommended` de SonarJS.
 
 Para garantizar que no haya reglas de formato ni de estilo, el preset apaga al final:
 
