@@ -211,6 +211,27 @@ const BACKGROUND_PLACEHOLDER_KEYS = [
 ];
 
 /**
+ * Opens the step with its next key and leaves `background` as a comment on that key's line, when the step already
+ * has every placeholder key. Only that key moves one line up in the report.
+ * @param {string[]} lines - Workflow lines, changed in place.
+ * @param {number} index - Line of `- background: ...`.
+ * @param {{ indent: string; dash: string; key: string; rest: string }} parts - Parts of the line.
+ */
+function swapWithNextKey(lines, index, { indent, dash, key, rest }) {
+  const keyColumn = indent.length + dash.length;
+  // The first line of the step after `background`, if it is a key of the same step.
+  const following = lines.findIndex((line, lineIndex) => lineIndex > index && !isBlankOrComment(line));
+  const next = following !== -1 && indentationOf(lines[following]) === keyColumn ? following : -1;
+  if (next === -1) {
+    // A step with only `background`: an empty mapping keeps it a list item.
+    lines[index] = `${indent}${dash}{}`;
+    return;
+  }
+  lines[index] = `${indent}${dash}${lines[next].trimStart()}`;
+  lines[next] = `${" ".repeat(keyColumn)}# ${key}:${rest}`;
+}
+
+/**
  * Rewrites one step key when it belongs to background steps; leaves any other key as it is.
  * @param {string[]} lines - Workflow lines, changed in place.
  * @param {number} index - Line of the key.
@@ -221,10 +242,13 @@ function rewriteStepKey(lines, index, { indent, dash, key, rest }, keysOfStep) {
   if (key === BACKGROUND_KEY) {
     // A comment right after `- ` would leave an empty step; a key the step does not have keeps it a mapping.
     const placeholder = BACKGROUND_PLACEHOLDER_KEYS.find(([placeholderKey]) => !keysOfStep.has(placeholderKey));
-    lines[index] =
-      dash === "" || placeholder === undefined
-        ? `${indent}# ${key}:${rest}`
-        : `${indent}${dash}${placeholder[0]}: ${placeholder[1]}`;
+    if (dash === "") {
+      lines[index] = `${indent}# ${key}:${rest}`;
+    } else if (placeholder === undefined) {
+      swapWithNextKey(lines, index, { indent, dash, key, rest });
+    } else {
+      lines[index] = `${indent}${dash}${placeholder[0]}: ${placeholder[1]}`;
+    }
     return;
   }
   if (!SYNCHRONIZATION_KEYS.has(key)) {

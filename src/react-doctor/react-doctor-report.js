@@ -5,6 +5,7 @@
  * advice that breaks valid code when applied blindly. golfo-lint keeps one finding per problem, so it drops them.
  */
 import { usesOnlyConstantRawSql } from "./constant-sql.js";
+import { checksFetchStatus } from "./fetch-status.js";
 
 /** react-doctor plugins whose rules the ESLint preset or another golfo-lint analysis already runs. */
 const DUPLICATED_PLUGINS = new Set([
@@ -101,18 +102,9 @@ const NON_REACT_FILE_PATTERN = /\.(?:html?|ya?ml)$/u;
 /**
  * `no-fetch-response-used-without-status-check` only accepts a status check before the body is read, but reading
  * the body first to show the error message of the API and then checking `response.ok` is valid. The finding points
- * at the `fetch` call; it is dropped when the variable that holds the response is checked a few lines below.
+ * at the `fetch` call; it is dropped when the function that declares the response checks its status.
  */
 const FETCH_STATUS_RULE = "no-fetch-response-used-without-status-check";
-
-/** Lines after the `fetch` call where a check of `ok` or `status` counts. */
-const FETCH_STATUS_CHECK_WINDOW = 40;
-
-/** What follows the name of the variable in `const response = await fetch(`, as formatters print it. */
-const FETCH_ASSIGNMENT = " = await fetch(";
-
-/** A character of a JavaScript identifier. */
-const IDENTIFIER_CHARACTER_PATTERN = /[\w$]/u;
 
 /**
  * `raw-sql-injection-risk` reports one `sql.raw(...)` per file, also when its argument is SQL fixed in the code
@@ -127,39 +119,6 @@ const RAW_SQL_RULE = "raw-sql-injection-risk";
  * @param {string} filePath - Path relative to the project, as react-doctor reports it.
  * @returns {string | undefined} Its text, or `undefined` when it cannot be read.
  */
-
-/**
- * Reads the name of the variable a line assigns a `fetch` response to.
- * @param {string} line - Line of the `fetch` call.
- * @returns {string | undefined} `response` in `const response = await fetch(`, or `undefined`.
- */
-function readAssignedFetchVariable(line) {
-  const assignmentStart = line.indexOf(FETCH_ASSIGNMENT);
-  let nameStart = assignmentStart;
-  while (nameStart > 0 && IDENTIFIER_CHARACTER_PATTERN.test(line.charAt(nameStart - 1))) {
-    nameStart -= 1;
-  }
-  return assignmentStart > 0 && nameStart < assignmentStart ? line.slice(nameStart, assignmentStart) : undefined;
-}
-
-/**
- * Checks whether the response of the `fetch` call a finding points at is checked a few lines below.
- * @param {ReactDoctorDiagnostic} diagnostic - Finding.
- * @param {SourceReader} readSource - Reads files of the project.
- * @returns {boolean} Whether `<response>.ok` or `<response>.status` is read after the call.
- */
-function checksFetchStatusLater(diagnostic, readSource) {
-  const lines = readSource(diagnostic.filePath)?.split("\n");
-  if (lines === undefined) {
-    return false;
-  }
-  const name = readAssignedFetchVariable(lines[diagnostic.line - 1] ?? "");
-  if (name === undefined) {
-    return false;
-  }
-  const statusCheck = new RegExp(String.raw`\b${name.replaceAll("$", String.raw`\$`)}\.(?:ok|status)\b`, "u");
-  return lines.slice(diagnostic.line, diagnostic.line + FETCH_STATUS_CHECK_WINDOW).some((line) => statusCheck.test(line));
-}
 
 /**
  * @typedef {object} ReactDoctorDiagnostic
@@ -196,7 +155,7 @@ export function isReportedDiagnostic(diagnostic, readSource = () => undefined) {
   ) {
     return false;
   }
-  if (diagnostic.rule === FETCH_STATUS_RULE && checksFetchStatusLater(diagnostic, readSource)) {
+  if (diagnostic.rule === FETCH_STATUS_RULE && checksFetchStatus(diagnostic.filePath, diagnostic.line, readSource)) {
     return false;
   }
   if (diagnostic.rule === RAW_SQL_RULE && usesOnlyConstantRawSql(diagnostic.filePath, readSource)) {

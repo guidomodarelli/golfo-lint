@@ -62,6 +62,25 @@ describe("rewriteBackgroundSteps", () => {
     assert.equal(lines[4], "        name: Start server");
   });
 
+  it("si el paso ya tiene todas las claves de reemplazo, lo abre con su clave siguiente", () => {
+    const workflow = [
+      "jobs:",
+      "  build:",
+      "    steps:",
+      "      - background: true",
+      "        name: Server",
+      "        continue-on-error: true",
+      "        timeout-minutes: 5",
+      "        shell: bash",
+      "        run: npm start",
+      "",
+    ].join("\n");
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[3], "      - name: Server");
+    assert.equal(lines[4], "        # background: true");
+    assert.equal(lines.length, workflow.split("\n").length);
+  });
+
   it("reconoce los pasos alineados con steps:, que YAML permite", () => {
     const workflow = "jobs:\n  build:\n    steps:\n    - run: npm start\n      background: true\n    - wait: server\n    env:\n      CI: true\n";
     assert.equal(usesBackgroundSteps(workflow), true);

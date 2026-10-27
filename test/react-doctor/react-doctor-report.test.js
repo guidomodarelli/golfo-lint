@@ -69,6 +69,10 @@ describe("isReportedDiagnostic", () => {
     const unchecked = source.replace("  if (!response.ok) throw new Error(body.message);\n", "");
     assert.equal(isReportedDiagnostic(fetchFinding, () => unchecked), true);
     assert.equal(isReportedDiagnostic(fetchFinding), true);
+    const otherFunction = `${unchecked}\nasync function other() {\n  const response = await fetch("/x");\n  if (!response.ok) throw new Error("x");\n}\n`;
+    assert.equal(isReportedDiagnostic(fetchFinding, () => otherFunction), true);
+    const assigned = source.replace("  const response = await fetch(", "  let response;\n  response = await fetch(");
+    assert.equal(isReportedDiagnostic(diagnostic({ rule: "no-fetch-response-used-without-status-check", line: 3 }), () => assigned), false);
   });
 
   it("descarta sql.raw solo cuando todas sus llamadas del archivo reciben SQL fijo en el código", () => {
@@ -92,6 +96,15 @@ describe("isReportedDiagnostic", () => {
     assert.equal(isReportedDiagnostic(finding, reader(withCall)), true);
     const fromRequest = { ...files, "src/repository.ts": "const SQL = request.query.sql;\nawait db.execute(sql.raw(SQL));\n" };
     assert.equal(isReportedDiagnostic(finding, reader(fromRequest)), true);
+    const shadowed = { ...files, "src/repository.ts": 'const ROLLBACK = "rollback";\nexport function run(ROLLBACK: string) {\n  return db.execute(sql.raw(ROLLBACK));\n}\n' };
+    assert.equal(isReportedDiagnostic(finding, reader(shadowed)), true);
+    const mutated = {
+      ...files,
+      "src/repository.ts": 'const SQL = { query: "select 1" } as const;\nSQL.query = request.query.sql;\nawait db.execute(sql.raw(SQL.query));\n',
+    };
+    assert.equal(isReportedDiagnostic(finding, reader(mutated)), true);
+    const mutable = { ...files, "src/repository.ts": 'const SQL = { query: "select 1" };\nawait db.execute(sql.raw(SQL.query));\n' };
+    assert.equal(isReportedDiagnostic(finding, reader(mutable)), true);
     const interpolated = { ...files, "src/repository.ts": `await db.execute(sql.raw(\`payload ->> '\${key}'\`));\n` };
     assert.equal(isReportedDiagnostic(finding, reader(interpolated)), true);
   });
