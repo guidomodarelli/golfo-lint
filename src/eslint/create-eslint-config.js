@@ -32,6 +32,9 @@ import {
 import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules } from "./formatting-rules.js";
 import { noUnnecessaryCondition } from "./rules/no-unnecessary-condition.js";
 
+
+/** Prefix of SonarJS's rules for AWS CDK infrastructure code (`sonarjs/aws-s3-bucket-public-access`, ...). */
+const AWS_CDK_RULE_PREFIX = "aws-";
 /** @typedef {import("eslint").Linter.Config} FlatConfig */
 
 /** Files written in TypeScript, which get type-aware rules. */
@@ -144,6 +147,9 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * @property {boolean} [next] - Whether to enable the Next.js rules, Core Web Vitals included (default `false`).
  * @property {boolean} [vitest] - Whether to enable the Vitest rules in test files: no focused or skipped tests,
  * no tests without assertions (default `false`).
+ * @property {boolean} [awsCdk] - Whether to enable SonarJS's AWS CDK rules (`sonarjs/aws-*`), which check
+ * infrastructure written with `aws-cdk-lib` (default `false`: in other projects they cannot report anything, and
+ * they take about a tenth of the lint time).
  * @property {boolean} [allowDisableComments] - Whether `eslint-disable` comments may silence a rule, as long as
  * they explain why (default `false`: an agent has to fix the code, not silence the linter).
  * @property {string[]} [ignores] - Extra globs to skip, besides dependencies and build output.
@@ -413,6 +419,16 @@ function createTestFilesConfig(testFiles) {
 }
 
 /**
+ * Lists SonarJS's AWS CDK rules, which only report code built with `aws-cdk-lib`.
+ * @returns {string[]} Fully qualified rule names.
+ */
+function listAwsCdkRules() {
+  return Object.keys(sonarjs.rules ?? {})
+    .filter((ruleName) => ruleName.startsWith(AWS_CDK_RULE_PREFIX))
+    .map((ruleName) => `sonarjs/${ruleName}`);
+}
+
+/**
  * Builds the shared ESLint flat config, meant for code written by AI agents. It enables only rules that catch
  * bugs, dead code, excessive complexity or unclear names, turns off every formatting rule of the plugins it uses,
  * reports everything as an error and forbids silencing rules with comments.
@@ -428,12 +444,23 @@ export function createEslintConfig(options = {}) {
     react: false,
     next: false,
     vitest: false,
+    awsCdk: false,
     allowDisableComments: false,
     ignores: [],
     testFiles: TEST_FILE_GLOBS,
   };
-  const { tsconfigRootDir, typeChecked, tsconfigFiles, react, next, vitest, allowDisableComments, ignores, testFiles } =
-    { ...defaults, ...options };
+  const {
+    tsconfigRootDir,
+    typeChecked,
+    tsconfigFiles,
+    react,
+    next,
+    vitest,
+    awsCdk,
+    allowDisableComments,
+    ignores,
+    testFiles,
+  } = { ...defaults, ...options };
 
   return promoteWarningsToErrors([
     { name: "golfo-lint/ignores", ignores: [...IGNORED_PATH_GLOBS, ...ignores] },
@@ -463,5 +490,6 @@ export function createEslintConfig(options = {}) {
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
     { name: "golfo-lint/no-duplicates", rules: turnOffRules(DUPLICATED_RULES) },
     { name: "golfo-lint/no-false-alarms", rules: turnOffRules(NON_DEFECT_RULES) },
+    ...(awsCdk ? [] : [{ name: "golfo-lint/no-aws-cdk", rules: turnOffRules(listAwsCdkRules()) }]),
   ]);
 }

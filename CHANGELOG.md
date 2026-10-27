@@ -6,6 +6,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
+- Opción `awsCdk` (por defecto `false`): las reglas `sonarjs/aws-*` solo corren en proyectos con `aws-cdk-lib`. En los demás no podían reportar nada y se llevaban cerca del 10 % del tiempo de ESLint en TuTribu.
 - `golfo-lint/no-unnecessary-condition` reemplaza a `@typescript-eslint/no-unnecessary-condition`: reporta lo mismo, salvo las condiciones que dependen de tipos que TypeScript no puede conocer (una propiedad que pudo cambiar después de un `await`, un `let` que reasigna un callback, elementos de arrays y records sin `noUncheckedIndexedAccess`, APIs del entorno que pueden faltar), que llevaban a borrar chequeos necesarios.
 - `@typescript-eslint/require-array-sort-compare`: ordenar números u objetos sin función de comparación es un error; los arrays de strings se pueden ordenar sin ella. En JavaScript, o con `typeChecked: false`, sigue `unicorn/require-array-sort-compare`, que pide la función en todo `sort`.
 - `golfo-lint unused` usa la configuración compartida de knip cuando el proyecto no tiene la suya. `createKnipConfig()` toma como entrada la config de `@golfo/rp`, los scripts de `.golfo-rp/` y `scripts/` y `open-next.config.ts`; le pasa al plugin de Playwright todas las configs `playwright*.config.*`; en Next.js acepta `server-only` y `client-only` sin declararlos; y suma el `entry` del proyecto a esas entradas en vez de reemplazarlas.
@@ -25,6 +26,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Removed
 
+- `sonarjs/no-redundant-assignments`: en TuTribu su único hallazgo fue un falso positivo (una variable que un handler cambia después de un `await`), y era de las reglas más lentas del preset (7 % del tiempo).
 - `golfo-lint complexity` y `@golfo/lint/lizard`: lizard solo analizaba JavaScript y TypeScript, que el preset de ESLint ya cubre.
 - Reglas de ESLint que solo eligen entre formas equivalentes de escribir lo mismo: `sonarjs/no-nested-template-literals`, `sonarjs/no-unenclosed-multiline-block` (depende de cómo está formateado el código), `sonarjs/prefer-specific-assertions`, `unicorn/no-array-sort`, `unicorn/no-array-reverse` y `vitest/prefer-called-exactly-once-with`.
 - Reglas de ESLint que reportan lo mismo que otra: `sonarjs/no-unused-vars`, `sonarjs/unused-import`, `sonarjs/no-dead-store`, `sonarjs/no-nested-functions`, `sonarjs/no-alphabetical-sort`, `unicorn/require-array-sort-compare`, `unicorn/no-useless-coercion` (con tipos), `sonarjs/assertions-in-tests` (con Vitest) y `sonarjs/no-hardcoded-passwords` y `sonarjs/no-hardcoded-secrets` (gitleaks).

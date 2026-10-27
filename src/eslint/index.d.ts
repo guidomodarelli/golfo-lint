@@ -18,6 +18,11 @@ export interface EslintConfigOptions {
   next?: boolean;
   /** Whether to enable the Vitest rules in test files (default `false`). */
   vitest?: boolean;
+  /**
+   * Whether to enable SonarJS's AWS CDK rules (`sonarjs/aws-*`), which check infrastructure written with
+   * `aws-cdk-lib` (default `false`).
+   */
+  awsCdk?: boolean;
   /** Whether `eslint-disable` comments may silence a rule, with a description (default `false`). */
   allowDisableComments?: boolean;
   /** Extra globs to skip, besides dependencies and build output. */

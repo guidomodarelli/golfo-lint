@@ -70,6 +70,14 @@ describe("createEslintConfig", () => {
     });
   }
 
+  it("apaga las reglas de AWS CDK salvo con awsCdk", async () => {
+    const isAwsCdkRule = (/** @type {{ ruleName: string }} */ { ruleName }) => ruleName.startsWith("sonarjs/aws-");
+    const withoutAwsCdk = await listEnabledRules({ typeChecked: false }, "snippet.js");
+    const withAwsCdk = await listEnabledRules({ typeChecked: false, awsCdk: true }, "snippet.js");
+    assert.deepEqual(withoutAwsCdk.filter(isAwsCdkRule), []);
+    assert.ok(withAwsCdk.some(isAwsCdkRule), "con awsCdk se esperaban reglas sonarjs/aws-*");
+  });
+
   it("exige palabras completas en lugar de abreviaturas, sin abreviar nombres completos", async () => {
     const ruleIds = await lintSnippet(
       "export function saveApplicationSettings(errMsg) {\n  return { message: errMsg };\n}\n",
