@@ -136,6 +136,20 @@ describe("createEslintConfig", () => {
     assert.ok(!result.messages.some((message) => message.ruleId === "@typescript-eslint/no-unnecessary-condition"));
   });
 
+  it("con --fix, deja imports que compilan cuando mezclan valores y tipos", async () => {
+    const linter = new ESLint({
+      cwd: TYPED_FIXTURE_DIRECTORY,
+      fix: true,
+      overrideConfigFile: true,
+      overrideConfig: createEslintConfig({ tsconfigRootDir: TYPED_FIXTURE_DIRECTORY, testFiles: [] }),
+    });
+    const [result] = await linter.lintFiles(["mixed-imports.ts"]);
+    const output = result.output ?? "";
+    assert.match(output, /^import type \{ Shape as Figure, answer as size \} from/mu);
+    assert.match(output, /^import \{ answer, type Shape \} from/mu);
+    assert.doesNotMatch(output, /import type \{[^}]*\btype /u);
+  });
+
   it("con tipos, reporta promesas que nadie espera", async () => {
     const [result] = await createLinter({}).lintFiles(["floating-promise.ts"]);
     const ruleIds = result.messages.map((message) => message.ruleId);

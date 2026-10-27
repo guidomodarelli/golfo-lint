@@ -205,7 +205,9 @@ function createPluginRules() {
         ignoreTypeIndexes: true,
       },
     ],
-    "import-x/no-duplicates": "error",
+    // Inline `type` specifiers (`import { value, type Shape }`): merging a separate `import type { ... }` into an
+    // import that already has them moved the values into the type-only import, which no longer compiles.
+    "import-x/no-duplicates": ["error", { "prefer-inline": true }],
     "import-x/no-mutable-exports": "error",
     "import-x/no-self-import": "error",
     "import-x/no-useless-path-segments": "error",
@@ -281,7 +283,12 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // React ignores what an event handler returns, so `onClick={save}` with an async `save` is fine; promises
         // passed where a callback's result is used are still reported.
         "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],
-        "@typescript-eslint/consistent-type-imports": "error",
+        // Inline, like `import-x/no-duplicates`: the default fix turns `import { type A, B }` into
+        // `import type { type A, B }`, which TypeScript rejects.
+        "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
+        // `import { type A, type B }` keeps an empty side-effect import under `verbatimModuleSyntax`: when every
+        // specifier is a type, `import type { A, B }`.
+        "@typescript-eslint/no-import-type-side-effects": "error",
         "@typescript-eslint/prefer-nullish-coalescing": "error",
         "@typescript-eslint/prefer-optional-chain": "error",
         "@typescript-eslint/switch-exhaustiveness-check": "error",

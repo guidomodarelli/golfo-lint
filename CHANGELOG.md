@@ -18,6 +18,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 - Los imports que no resuelven y los paquetes que faltan en `package.json` los reporta solo `golfo-lint unused` (knip); `golfo-lint architecture` los repetía.
 - Las carpetas `mocks/`, `__mocks__/` y `dev-mocks/` pueden importar devDependencies (por ejemplo, los handlers de MSW que se cargan solo en desarrollo).
 - En los tests se permiten `any` y `!`.
+- `import-x/no-duplicates` usa `prefer-inline` y `@typescript-eslint/consistent-type-imports` usa `fixStyle: "inline-type-imports"`, con `@typescript-eslint/no-import-type-side-effects`. Con las opciones por defecto, `eslint --fix` dejaba imports que no compilan: movía valores a un `import type` o escribía `import type { type A, B }`.
 - `@typescript-eslint/no-misused-promises` acepta funciones async como handlers de eventos de JSX (`onClick={save}`): React ignora lo que devuelven.
 - Requiere Node.js 22.15 o superior.
 
