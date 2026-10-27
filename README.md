@@ -99,7 +99,10 @@ En los tests se permiten `any` (cuerpos JSON sin tipo, `expect.any()`) y `!` (si
 
 TypeScript 7 todavía no es compatible con typescript-eslint ni con dependency-cruiser, así que el paquete trae su propio TypeScript 6 solo para el análisis, también en proyectos que compilan con TypeScript 7.
 
-En un proyecto grande, el análisis con tipos tarda: unos 12 minutos para las 200.000 líneas de TuTribu. `--concurrency auto` reparte los archivos entre hilos (cada uno arma su propio programa de TypeScript, así que usa más memoria).
+En un proyecto grande, el análisis con tipos tarda: unos 12 minutos para las 200.000 líneas de TuTribu en un solo hilo. Dos opciones lo bajan:
+
+- `--concurrency auto` reparte los archivos entre hilos (cada uno arma su propio programa de TypeScript, así que usa más memoria). En TuTribu, con 4 hilos, tarda unos 6 minutos.
+- `--cache --cache-strategy content` vuelve a analizar solo los archivos que cambiaron. Guardá la caché en la CI (por ejemplo con `actions/cache`) para que un PR chico tarde segundos. Como las reglas con tipos de un archivo dependen de los tipos de otros, la caché puede dejar un hallazgo viejo o perder uno nuevo cuando cambia un tipo que se usa en otro archivo: corré el análisis completo, sin caché, en la rama principal.
 
 ## Límites
 
