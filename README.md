@@ -130,7 +130,7 @@ Con `bem: true`, las clases deben seguir BEM: bloque en PascalCase, elementos en
 
 ## dependency-cruiser
 
-`golfo-lint architecture` analiza `src`, `app`, `components`, `lib`, `hooks` y `bin`. Prohíbe ciclos, devDependencies importadas desde código de producción, tests importados desde producción y módulos de Node.js deprecados. Cada regla explica qué hacer en lugar del import prohibido. Los imports que no resuelven y los paquetes que faltan en `package.json` los reporta `golfo-lint unused` (knip), que además conoce los paquetes que pone un framework.
+`golfo-lint architecture` analiza `src`, `app`, `components`, `lib`, `hooks` y `bin`. Prohíbe ciclos, devDependencies importadas desde código de producción (salvo desde carpetas `mocks/`, `__mocks__/` y `dev-mocks/`, como los handlers de MSW que se cargan solo en desarrollo), tests importados desde producción y módulos de Node.js deprecados. Cada regla explica qué hacer en lugar del import prohibido. Los imports que no resuelven y los paquetes que faltan en `package.json` los reporta `golfo-lint unused` (knip), que además conoce los paquetes que pone un framework.
 
 dependency-cruiser no soporta TypeScript 7 y, si lo encuentra en el proyecto, saltea en silencio todos los archivos `.ts`: el chequeo pasaba sin analizar nada. `golfo-lint architecture` le hace usar el TypeScript 6 de `@golfo/lint` con un hook de resolución que carga con `--import`.
 

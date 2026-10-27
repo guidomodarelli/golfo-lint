@@ -11,6 +11,12 @@ const PRODUCTION_CODE_PATH = String.raw`^(src|app|components|lib|hooks|bin)/`;
 const TEST_CODE_PATH = String.raw`(^|/)(test|tests|__tests__|e2e)/|\.(test|spec)\.[cm]?[jt]sx?$`;
 
 /**
+ * Mock folders: code that only runs in development or tests, such as the MSW handlers the MSW docs place in
+ * `src/mocks/`, loaded behind a `NODE_ENV` check that production builds drop. They may import devDependencies.
+ */
+const MOCK_CODE_PATH = String.raw`(^|/)(mocks|__mocks__|dev-mocks)/`;
+
+/**
  * `@golfo/lint/react-scan`, the only devDependency production code may import: it loads react-scan only in
  * development, and production bundles drop that import.
  */
@@ -61,7 +67,7 @@ const BASE_RULES = /** @type {ForbiddenRule[]} */ ([
     name: "not-to-dev-dep",
     severity: "error",
     comment: "El código de producción importa una devDependency, que no se instala en producción.",
-    from: { path: PRODUCTION_CODE_PATH, pathNot: TEST_CODE_PATH },
+    from: { path: PRODUCTION_CODE_PATH, pathNot: [TEST_CODE_PATH, MOCK_CODE_PATH] },
     to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"], pathNot: DEVELOPMENT_ONLY_PACKAGE_PATH },
   },
   {
