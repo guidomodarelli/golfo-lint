@@ -21,7 +21,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 - `import-x/no-duplicates` usa `prefer-inline` y `@typescript-eslint/consistent-type-imports` usa `fixStyle: "inline-type-imports"`, con `@typescript-eslint/no-import-type-side-effects`. Con las opciones por defecto, `eslint --fix` dejaba imports que no compilan: movía valores a un `import type` o escribía `import type { type A, B }`.
 - `@typescript-eslint/no-misused-promises` acepta funciones async como handlers de eventos de JSX (`onClick={save}`): React ignora lo que devuelven.
 - Requiere Node.js 22.15 o superior.
-- El typecheck del paquete corre con `bun check` (Bun fijado en `.bun-version`) en lugar de `tsc`. No cambia nada para quien instala `@golfo/lint`.
+- El typecheck del paquete corre con `bun check` (Bun 1.4.4, fijado en `.bun-version`) en lugar de `tsc`. No cambia nada para quien instala `@golfo/lint`.
 
 ### Removed
 
