@@ -287,7 +287,10 @@ describe("golfo-lint secrets", { skip: findExternalCommand(GITLEAKS_CANDIDATES) 
     const folder = createTemporaryFolder();
     const recordsFolder = path.join(folder, ".golfo/skill-coverage/records");
     mkdirSync(recordsFolder, { recursive: true });
-    const hashes = { "src/auth.ts#REAUTHENTICATION_TOKEN.kind": "d1a313968195f0da", "src/prices.ts#hasLinkedInvitations": "529b9e9bc654142a" };
+    // Keys that look like `generic-api-key` and `linkedin-client-secret`; built at run time, so this file itself does
+    // not trip gitleaks.
+    const linkedKey = ["src/prices.ts#hasLinked", "Invitations"].join("");
+    const hashes = { "src/auth.ts#REAUTHENTICATION_TOKEN.kind": "d1a313968195f0da", [linkedKey]: "529b9e9bc654142a" };
     writeFileSync(path.join(recordsFolder, "auth.json"), JSON.stringify({ hashes }, null, 2));
     assert.equal((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
 
