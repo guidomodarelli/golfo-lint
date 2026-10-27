@@ -4,6 +4,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
 ### Added
 
 - Opción `awsCdk` (por defecto `false`): las reglas `sonarjs/aws-*` solo corren en proyectos con `aws-cdk-lib`. En los demás no podían reportar nada y se llevaban cerca del 10 % del tiempo de ESLint en TuTribu.
