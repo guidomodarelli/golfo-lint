@@ -4,6 +4,10 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+### Fixed
+
+- El workflow de release instala Bun, que `npm run ci` usa para el typecheck: la publicación de 0.2.0 falló por eso y su contenido sale en esta versión.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added
