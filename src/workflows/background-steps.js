@@ -53,6 +53,7 @@ const STEPS_KEY = "steps";
 /**
  * @typedef {object} StepKeyLine
  * @property {number} index - Index of the line.
+ * @property {number} stepIndex - Index of the line that opens its step, the one with `- `.
  * @property {{ indent: string; dash: string; key: string; rest: string }} parts - Parts of the line.
  */
 
@@ -67,15 +68,18 @@ function listStepKeyLines(lines) {
   const stepKeys = [];
   let stepsIndent = -1;
   let stepKeyIndent = -1;
+  let stepIndex = -1;
   lines.forEach((line, index) => {
     if (isBlankOrComment(line)) {
       return;
     }
-    if (stepsIndent !== -1 && indentationOf(line) <= stepsIndent) {
+    const groups = STEP_KEY_PATTERN.exec(line)?.groups;
+    // YAML lets the `-` of the steps sit at the same column as `steps:`; only a key there ends the list.
+    const continuesIndentlessList = groups?.dash !== undefined && indentationOf(line) === stepsIndent;
+    if (stepsIndent !== -1 && indentationOf(line) <= stepsIndent && !continuesIndentlessList) {
       stepsIndent = -1;
       stepKeyIndent = -1;
     }
-    const groups = STEP_KEY_PATTERN.exec(line)?.groups;
     if (groups === undefined) {
       return;
     }
@@ -90,10 +94,12 @@ function listStepKeyLines(lines) {
     const keyIndent = groups.indent.length + (groups.dash ?? "").length;
     if (groups.dash !== undefined) {
       stepKeyIndent = keyIndent;
+      stepIndex = index;
     }
     if (keyIndent === stepKeyIndent) {
       stepKeys.push({
         index,
+        stepIndex,
         parts: { indent: groups.indent, dash: groups.dash ?? "", key: groups.key, rest: groups.rest },
       });
     }
@@ -163,21 +169,40 @@ function listNestedLineIndexes(lines, openingIndex, blockIndent) {
  * @param {string[]} lines - Workflow lines, changed in place.
  */
 function rewriteBackgroundKeys(lines) {
-  for (const { index, parts } of listStepKeyLines(lines)) {
-    rewriteStepKey(lines, index, parts);
+  const stepKeys = listStepKeyLines(lines);
+  for (const { index, stepIndex, parts } of stepKeys) {
+    const keysOfStep = new Set(stepKeys.filter((stepKey) => stepKey.stepIndex === stepIndex).map(({ parts: { key } }) => key));
+    rewriteStepKey(lines, index, parts, keysOfStep);
   }
 }
+
+/**
+ * Keys that can stand in for `background: true` when it opens a step (`- background: true`), so the step stays a
+ * mapping. Each one keeps the step running as before; the first one the step does not have is used, so the step
+ * does not end up with a key twice.
+ */
+const BACKGROUND_PLACEHOLDER_KEYS = [
+  ["name", "background"],
+  ["continue-on-error", "false"],
+  ["timeout-minutes", "360"],
+  ["shell", "bash"],
+];
 
 /**
  * Rewrites one step key when it belongs to background steps; leaves any other key as it is.
  * @param {string[]} lines - Workflow lines, changed in place.
  * @param {number} index - Line of the key.
  * @param {{ indent: string; dash: string; key: string; rest: string }} parts - Parts of the line.
+ * @param {Set<string>} keysOfStep - Keys the step already has.
  */
-function rewriteStepKey(lines, index, { indent, dash, key, rest }) {
+function rewriteStepKey(lines, index, { indent, dash, key, rest }, keysOfStep) {
   if (key === BACKGROUND_KEY) {
-    // A comment right after `- ` would leave an empty step; a name keeps the step a mapping.
-    lines[index] = dash === "" ? `${indent}# ${key}:${rest}` : `${indent}${dash}name: ${key}`;
+    // A comment right after `- ` would leave an empty step; a key the step does not have keeps it a mapping.
+    const placeholder = BACKGROUND_PLACEHOLDER_KEYS.find(([placeholderKey]) => !keysOfStep.has(placeholderKey));
+    lines[index] =
+      dash === "" || placeholder === undefined
+        ? `${indent}# ${key}:${rest}`
+        : `${indent}${dash}${placeholder[0]}: ${placeholder[1]}`;
     return;
   }
   if (!SYNCHRONIZATION_KEYS.has(key)) {

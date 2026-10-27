@@ -140,9 +140,9 @@ export const DUPLICATED_RULES = [
   // `unicorn/prefer-boolean-return` is a syntax preference, so neither stays.
   "sonarjs/prefer-single-boolean-return",
   // `@typescript-eslint/require-array-sort-compare` stays: it knows the element type and accepts arrays of
-  // strings, which these two report and push towards `localeCompare`, whose order changes with the locale.
+  // strings, which this one reports and pushes towards `localeCompare`, whose order changes with the locale.
+  // `unicorn/require-array-sort-compare` is turned off only where the typed rule runs.
   "sonarjs/no-alphabetical-sort",
-  "unicorn/require-array-sort-compare",
   // `import-x/no-cycle` and dependency-cruiser's `no-circular` both stay: one in the editor, one per repository.
   // `@typescript-eslint/no-unused-vars` stays.
   "sonarjs/no-unused-vars",

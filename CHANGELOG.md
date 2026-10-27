@@ -7,7 +7,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 ### Added
 
 - `golfo-lint/no-unnecessary-condition` reemplaza a `@typescript-eslint/no-unnecessary-condition`: reporta lo mismo, salvo las condiciones que dependen de tipos que TypeScript no puede conocer (una propiedad que pudo cambiar después de un `await`, un `let` que reasigna un callback, elementos de arrays y records sin `noUncheckedIndexedAccess`, APIs del entorno que pueden faltar), que llevaban a borrar chequeos necesarios.
-- `@typescript-eslint/require-array-sort-compare`: ordenar números u objetos sin función de comparación es un error; los arrays de strings se pueden ordenar sin ella.
+- `@typescript-eslint/require-array-sort-compare`: ordenar números u objetos sin función de comparación es un error; los arrays de strings se pueden ordenar sin ella. En JavaScript, o con `typeChecked: false`, sigue `unicorn/require-array-sort-compare`, que pide la función en todo `sort`.
 - `golfo-lint unused` usa la configuración compartida de knip cuando el proyecto no tiene la suya. `createKnipConfig()` toma la config de `@golfo/rp` como entrada y, en Next.js, acepta `server-only` y `client-only` sin declararlos.
 - `golfo-lint workflows` entiende los pasos en segundo plano de GitHub Actions (`background`, `wait`, `wait-all`, `cancel` y `parallel`), que actionlint marcaba como errores de sintaxis, y revisa los pasos de cada grupo `parallel`.
 

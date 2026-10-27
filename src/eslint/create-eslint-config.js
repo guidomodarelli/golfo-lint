@@ -266,6 +266,9 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // Sorting without a compare function orders numbers and objects as strings. Arrays of strings sort by code
         // unit on purpose (stable ids, canonical keys), where `localeCompare` would make the order depend on the locale.
         "@typescript-eslint/require-array-sort-compare": ["error", { ignoreStringArrays: true }],
+        // The typed rule above knows the element type. Without types (JavaScript, `typeChecked: false`) the unicorn
+        // rule stays and asks for a compare function in every sort, or `[2, 10].sort()` would pass.
+        "unicorn/require-array-sort-compare": "off",
         // TypeScript and typed rules report these with the types: extra arguments are a compile error, and
         // comparisons that are always true or false go to `golfo-lint/no-unnecessary-condition`, which knows when the
         // types can be trusted; `@typescript-eslint/no-unnecessary-type-conversion` reports the same coercions.

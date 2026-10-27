@@ -55,6 +55,22 @@ describe("rewriteBackgroundSteps", () => {
     assert.equal(rewriteBackgroundSteps(workflow).text, workflow);
   });
 
+  it("cuando background abre el paso, usa una clave que el paso no tiene, para no repetir name", () => {
+    const workflow = "jobs:\n  build:\n    steps:\n      - background: true\n        name: Start server\n        run: npm start\n";
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[3], "      - continue-on-error: false");
+    assert.equal(lines[4], "        name: Start server");
+  });
+
+  it("reconoce los pasos alineados con steps:, que YAML permite", () => {
+    const workflow = "jobs:\n  build:\n    steps:\n    - run: npm start\n      background: true\n    - wait: server\n    env:\n      CI: true\n";
+    assert.equal(usesBackgroundSteps(workflow), true);
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[4], "      # background: true");
+    assert.equal(lines[5], '    - run: "true"');
+    assert.equal(lines[7], "      CI: true");
+  });
+
   it("no confunde con pasos las entradas de otras listas, como las de una matriz", () => {
     const workflow = [
       "jobs:",

@@ -85,6 +85,14 @@ describe("createEslintConfig", () => {
     assert.deepEqual(ruleIds, []);
   });
 
+  it("sin tipos, pide la función de comparación en todo sort, porque no distingue números de strings", async () => {
+    const ruleIds = await lintSnippet("export const sortNumbers = (numbers) => numbers.toSorted();\n");
+    assert.deepEqual(ruleIds, ["unicorn/require-array-sort-compare"]);
+    const typedRules = new Set((await listEnabledRules({}, "formatted-badly.ts")).map(({ ruleName }) => ruleName));
+    assert.ok(typedRules.has("@typescript-eslint/require-array-sort-compare"));
+    assert.ok(!typedRules.has("unicorn/require-array-sort-compare"));
+  });
+
   it("no reporta código correcto aunque esté mal formateado", async () => {
     const [result] = await createLinter({}).lintFiles(["formatted-badly.ts"]);
     assert.deepEqual(result.messages, []);
