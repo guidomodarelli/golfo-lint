@@ -69,7 +69,7 @@
   "scripts": {
     "lint": "eslint .",
     "test": "node --test \"test/**/*.test.js\"",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "pack:check": "npm pack --dry-run",
     "check:packed-install": "node scripts/check-packed-install.mjs",
     "ci": "npm run lint && npm run typecheck && npm test && npm run pack:check",
