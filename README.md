@@ -150,7 +150,7 @@ Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no
 ## jscpd y knip
 
 - `golfo-lint duplicates` falla cuando más del 1 % de las líneas está duplicado (bloques de al menos 50 tokens y 5 líneas). Un `.jscpd.json` del proyecto reemplaza los valores compartidos.
-- `golfo-lint unused` corre knip con la configuración compartida, salvo que el proyecto tenga la suya. La compartida no reporta los exports de tipos que usa su propio archivo, toma la config de `@golfo/rp` como entrada (golfo-rp lee sus exports) y, en Next.js, acepta `server-only` y `client-only` sin declararlos: Next.js los resuelve solo y su documentación hace opcional instalarlos. Para sumar entradas o ignorar algo, exportá `createKnipConfig({ ... })` de `@golfo/lint/knip` en `knip.config.js`.
+- `golfo-lint unused` corre knip con la configuración compartida, salvo que el proyecto tenga la suya. La compartida no reporta los exports de tipos que usa su propio archivo; toma como entrada la config de `@golfo/rp` (golfo-rp lee sus exports), los scripts que golfo-rp escribe en `.golfo-rp/`, `open-next.config.ts` y los scripts de `scripts/` que se corren por su ruta (`node scripts/x.mjs`); le pasa al plugin de Playwright todas las configs `playwright*.config.*`, también las de otras suites que un script elige con `--config`; y, en Next.js, acepta `server-only` y `client-only` sin declararlos: Next.js los resuelve solo y su documentación hace opcional instalarlos. Para sumar entradas o ignorar algo, exportá `createKnipConfig({ ... })` de `@golfo/lint/knip` en `knip.config.js`: `entry` e `ignoreDependencies` se suman a los valores compartidos y el resto de las opciones los reemplaza.
 
 ## react-doctor
 

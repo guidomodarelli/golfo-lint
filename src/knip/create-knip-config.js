@@ -42,6 +42,27 @@ const NEXT_BUILT_IN_PACKAGES = ["server-only", "client-only"];
 /** Package that makes a project a Next.js app. */
 const NEXT_PACKAGE = "next";
 
+/** Package of the Playwright test runner. */
+const PLAYWRIGHT_PACKAGE = "@playwright/test";
+
+/**
+ * Playwright configs: the default `playwright.config.ts` and the ones a project keeps for other suites
+ * (`playwright.ui.config.ts`), which a script passes with `--config` and knip's Playwright plugin does not find.
+ */
+const PLAYWRIGHT_CONFIG_PATTERN = /^playwright(?:\.[\w-]+)?\.config\.[cm]?[jt]s$/u;
+
+/**
+ * Entry files that tools other than knip's plugins load, kept only when they exist:
+ * - `open-next.config.ts`, read by OpenNext when it builds a Next.js app for Cloudflare;
+ * - the scripts `@golfo/rp` writes to `.golfo-rp/` (`vercel.json` runs `.golfo-rp/vercel-ignore-build.mjs`);
+ * - `scripts/`, Node.js scripts that people and CI jobs run by path (`node scripts/configure-cors.mjs`).
+ */
+const TOOL_ENTRY_FILES = [
+  { path: "open-next.config.ts", pattern: "open-next.config.ts" },
+  { path: ".golfo-rp", pattern: ".golfo-rp/*.{js,cjs,mjs}" },
+  { path: "scripts", pattern: `scripts/**/*.{${MODULE_EXTENSIONS.join(",")}}` },
+];
+
 /** Dependency fields where a project declares the packages it uses. */
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
 
@@ -55,31 +76,38 @@ export const KNIP_DEFAULTS = {
 };
 
 /**
- * Checks whether the project in a folder declares Next.js.
+ * Reads the packages a project declares in any dependency field.
  * @param {string} projectDirectory - Folder with the project's `package.json`.
- * @returns {boolean} Whether `next` is in any dependency field.
+ * @returns {Set<string>} Declared package names.
  */
-function dependsOnNext(projectDirectory) {
+function readDeclaredPackages(projectDirectory) {
   const manifestPath = path.join(projectDirectory, "package.json");
   if (!existsSync(manifestPath)) {
-    return false;
+    return new Set();
   }
   const manifest = /** @type {Record<string, unknown>} */ (JSON.parse(readFileSync(manifestPath, "utf8")));
-  return DEPENDENCY_FIELDS.some((field) => {
-    const dependencies = manifest[field];
-    return typeof dependencies === "object" && dependencies !== null && NEXT_PACKAGE in dependencies;
-  });
+  return new Set(
+    DEPENDENCY_FIELDS.flatMap((field) => {
+      const dependencies = manifest[field];
+      return typeof dependencies === "object" && dependencies !== null ? Object.keys(dependencies) : [];
+    }),
+  );
 }
 
 /**
- * Lists the entry files a project needs besides the ones knip finds: its `@golfo/rp` config, when it has one,
- * along with knip's own defaults, which an `entry` option would otherwise replace.
+ * Lists the entry files a project needs besides the ones knip's plugins find: its `@golfo/rp` config and the files
+ * of `TOOL_ENTRY_FILES` that exist, along with knip's own defaults, which an `entry` option would otherwise replace.
  * @param {string} projectDirectory - Folder of the project.
+ * @param {string[]} projectEntries - Entry patterns the project adds.
  * @returns {string[] | undefined} Entry patterns, or `undefined` to keep knip's defaults.
  */
-function listEntryFiles(projectDirectory) {
+function listEntryFiles(projectDirectory, projectEntries) {
   const golfoRpConfig = GOLFO_RP_CONFIG_FILES.find((fileName) => existsSync(path.join(projectDirectory, fileName)));
-  if (golfoRpConfig === undefined) {
+  const toolEntries = TOOL_ENTRY_FILES.filter((entry) => existsSync(path.join(projectDirectory, entry.path))).map(
+    (entry) => entry.pattern,
+  );
+  const extraEntries = [...(golfoRpConfig === undefined ? [] : [golfoRpConfig]), ...toolEntries, ...projectEntries];
+  if (extraEntries.length === 0) {
     return undefined;
   }
   // Only the default entries that exist: knip hints to remove patterns that match nothing.
@@ -88,7 +116,20 @@ function listEntryFiles(projectDirectory) {
       MODULE_EXTENSIONS.map((extension) => path.posix.join(folder, `${name}.${extension}`)),
     ),
   ).filter((entryFile) => existsSync(path.join(projectDirectory, entryFile)));
-  return [...defaultEntries, golfoRpConfig];
+  return [...defaultEntries, ...extraEntries];
+}
+
+/**
+ * Lists the Playwright configs in the root of a project that uses Playwright.
+ * @param {string} projectDirectory - Folder of the project.
+ * @param {Set<string>} declaredPackages - Packages the project declares.
+ * @returns {string[]} Config files, empty when there are none or the project does not use Playwright.
+ */
+function listPlaywrightConfigs(projectDirectory, declaredPackages) {
+  if (!declaredPackages.has(PLAYWRIGHT_PACKAGE)) {
+    return [];
+  }
+  return readdirSync(projectDirectory).filter((fileName) => PLAYWRIGHT_CONFIG_PATTERN.test(fileName));
 }
 
 /**
@@ -125,22 +166,26 @@ function listImportedBuiltInPackages(projectDirectory) {
 }
 
 /**
- * Builds a knip config from the shared defaults, to export from `knip.config.js`. It adds the `@golfo/rp` config as
- * an entry file and, in a Next.js project, accepts `server-only` and `client-only` without declaring them.
- * @param {KnipConfig & Record<string, unknown>} [overrides] - Project values that replace the defaults;
- * `ignoreDependencies` adds to the packages Next.js resolves by itself.
+ * Builds a knip config from the shared defaults, to export from `knip.config.js`. It adds as entries the `@golfo/rp`
+ * config, the files other tools load (`TOOL_ENTRY_FILES`) and every Playwright config; in a Next.js project, it
+ * accepts `server-only` and `client-only` without declaring them.
+ * @param {KnipConfig & Record<string, unknown>} [overrides] - Project values that replace the defaults; `entry`
+ * and `ignoreDependencies` add to the defaults instead.
  * @param {{ projectDirectory?: string }} [options] - Folder of the project (default: the current one).
  * @returns {KnipConfig & Record<string, unknown>} knip config.
  */
 export function createKnipConfig(overrides = {}, options = {}) {
   const projectDirectory = options.projectDirectory ?? process.cwd();
-  const builtInPackages = dependsOnNext(projectDirectory) ? listImportedBuiltInPackages(projectDirectory) : [];
+  const declaredPackages = readDeclaredPackages(projectDirectory);
+  const builtInPackages = declaredPackages.has(NEXT_PACKAGE) ? listImportedBuiltInPackages(projectDirectory) : [];
   const ignoreDependencies = [...builtInPackages, ...(overrides.ignoreDependencies ?? [])];
-  const entry = listEntryFiles(projectDirectory);
+  const entry = listEntryFiles(projectDirectory, overrides.entry ?? []);
+  const playwrightConfigs = listPlaywrightConfigs(projectDirectory, declaredPackages);
   return {
     ...KNIP_DEFAULTS,
-    ...(entry === undefined ? {} : { entry }),
+    ...(playwrightConfigs.length > 0 ? { playwright: { config: playwrightConfigs } } : {}),
     ...overrides,
+    ...(entry === undefined ? {} : { entry }),
     ...(ignoreDependencies.length > 0 ? { ignoreDependencies } : {}),
   };
 }

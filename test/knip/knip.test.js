@@ -38,4 +38,21 @@ describe("createKnipConfig", () => {
     const config = createKnipConfig({}, { projectDirectory: fixturePath("next-project") });
     assert.ok(config.entry?.includes("golfo-rp.config.mjs"));
   });
+
+  it("toma como entrada los archivos que cargan otras herramientas, solo si existen", () => {
+    const config = createKnipConfig({ entry: ["tests/runtime/*/index.ts"] }, { projectDirectory: fixturePath("next-project") });
+    assert.deepEqual(config.entry, [
+      "golfo-rp.config.mjs",
+      "open-next.config.ts",
+      ".golfo-rp/*.{js,cjs,mjs}",
+      "scripts/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+      "tests/runtime/*/index.ts",
+    ]);
+    assert.equal(createKnipConfig({}, { projectDirectory: fixturePath("knip-project") }).entry, undefined);
+  });
+
+  it("le pasa al plugin de Playwright todas sus configs, también las de otras suites", () => {
+    const config = createKnipConfig({}, { projectDirectory: fixturePath("next-project") });
+    assert.deepEqual(config.playwright, { config: ["playwright.ui.config.ts"] });
+  });
 });
