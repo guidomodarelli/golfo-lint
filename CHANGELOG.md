@@ -6,7 +6,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
-- `golfo-lint/no-unnecessary-condition` reemplaza a `@typescript-eslint/no-unnecessary-condition`: reporta lo mismo, salvo las condiciones que dependen de tipos que TypeScript no puede conocer (una propiedad que pudo cambiar después de un `await`, elementos de arrays y records sin `noUncheckedIndexedAccess`, APIs del navegador que pueden faltar), que llevaban a borrar chequeos necesarios.
+- `golfo-lint/no-unnecessary-condition` reemplaza a `@typescript-eslint/no-unnecessary-condition`: reporta lo mismo, salvo las condiciones que dependen de tipos que TypeScript no puede conocer (una propiedad que pudo cambiar después de un `await`, un `let` que reasigna un callback, elementos de arrays y records sin `noUncheckedIndexedAccess`, APIs del entorno que pueden faltar), que llevaban a borrar chequeos necesarios.
 - `@typescript-eslint/require-array-sort-compare`: ordenar números u objetos sin función de comparación es un error; los arrays de strings se pueden ordenar sin ella.
 - `golfo-lint unused` usa la configuración compartida de knip cuando el proyecto no tiene la suya. `createKnipConfig()` toma la config de `@golfo/rp` como entrada y, en Next.js, acepta `server-only` y `client-only` sin declararlos.
 - `golfo-lint workflows` entiende los pasos en segundo plano de GitHub Actions (`background`, `wait`, `wait-all`, `cancel` y `parallel`), que actionlint marcaba como errores de sintaxis, y revisa los pasos de cada grupo `parallel`.
@@ -26,7 +26,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 - Reglas de ESLint que solo eligen entre formas equivalentes de escribir lo mismo: `sonarjs/no-nested-template-literals`, `sonarjs/no-unenclosed-multiline-block` (depende de cómo está formateado el código), `sonarjs/prefer-specific-assertions`, `unicorn/no-array-sort`, `unicorn/no-array-reverse` y `vitest/prefer-called-exactly-once-with`.
 - Reglas de ESLint que reportan lo mismo que otra: `sonarjs/no-unused-vars`, `sonarjs/unused-import`, `sonarjs/no-dead-store`, `sonarjs/no-nested-functions`, `sonarjs/no-alphabetical-sort`, `unicorn/require-array-sort-compare`, `unicorn/no-useless-coercion` (con tipos), `sonarjs/assertions-in-tests` (con Vitest) y `sonarjs/no-hardcoded-passwords` y `sonarjs/no-hardcoded-secrets` (gitleaks).
 - Reglas de ESLint que marcan código válido: los *security hotspots* de SonarJS (`no-os-command-from-path`, `os-command`, `no-hardcoded-ip`, `no-clear-text-protocols`, `pseudo-random`), `no-promise-executor-return`, `no-unmodified-loop-condition`, `unicorn/no-exports-in-scripts`, `unicorn/no-error-property-assignment`, `@typescript-eslint/unbound-method`, `@typescript-eslint/no-dynamic-delete` y `@typescript-eslint/no-invalid-void-type`.
-- En TypeScript, `sonarjs/no-extra-arguments` (TypeScript ya lo rechaza) y `sonarjs/different-types-comparison` (lo reporta `golfo-lint/no-unnecessary-condition`).
+- En TypeScript, `sonarjs/no-extra-arguments` (TypeScript ya lo rechaza), `sonarjs/different-types-comparison` (lo reporta `golfo-lint/no-unnecessary-condition`) y `unicorn/no-useless-switch-case`, que pide borrar el `case` que `@typescript-eslint/switch-exhaustiveness-check` exige.
 - Reglas de Stylelint que solo eligen entre formas equivalentes: `declaration-block-no-redundant-longhand-properties` y `shorthand-property-no-redundant-values`.
 
 ### Fixed

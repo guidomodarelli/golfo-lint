@@ -272,6 +272,9 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         "sonarjs/different-types-comparison": "off",
         "sonarjs/no-extra-arguments": "off",
         "unicorn/no-useless-coercion": "off",
+        // `switch-exhaustiveness-check` asks for every member of a union, also the one that shares the `default`
+        // branch (`case "forbidden": default:`); this rule asks to delete that case, so the two contradict.
+        "unicorn/no-useless-switch-case": "off",
         // React ignores what an event handler returns, so `onClick={save}` with an async `save` is fine; promises
         // passed where a callback's result is used are still reported.
         "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],

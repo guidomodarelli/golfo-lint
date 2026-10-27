@@ -4,8 +4,10 @@
  * `await` or a function call, although they can change it: after `if (signal.aborted) return;` and an `await`,
  * `signal.aborted` can be `true` again, but the type says `false` and the rule reports the check as always falsy.
  * Without `noUncheckedIndexedAccess`, a variable read from an array (`const first = items[0]`) has a type that
- * cannot be `undefined`, and the rule reports its guard. An agent that follows those reports deletes a check the
- * code needs, so this rule drops them and keeps every other report of the original rule.
+ * cannot be `undefined`, and the rule reports its guard. A `let` that a callback or a cleanup reassigns
+ * (`let isCurrent = true; ... return () => { isCurrent = false; }`) keeps the type TypeScript narrowed it to, because
+ * TypeScript does not follow assignments made in other functions. An agent that follows those reports deletes a check
+ * the code needs, so this rule drops them and keeps every other report of the original rule.
  */
 import ts from "typescript";
 import tseslint from "typescript-eslint";
@@ -42,6 +44,8 @@ const wrappedRule = /** @type {RuleModule} */ (
  * @property {ts.TypeChecker} checker - Type checker of the program.
  * @property {(node: EstreeNode) => ts.Node | undefined} toTsNode - Maps an ESLint node to its TypeScript node.
  * @property {boolean} checksIndexedAccess - Whether `noUncheckedIndexedAccess` is on.
+ * @property {(sourceFile: ts.SourceFile) => boolean} isDefaultLibrary - Whether a file is one of TypeScript's `lib`
+ * files (`lib.dom.d.ts`...).
  */
 
 /**
@@ -109,6 +113,33 @@ function isNarrowedPropertyRead(tsNode, checker) {
 }
 
 /**
+ * Checks whether a `let` or `var` read got its type from control-flow narrowing. TypeScript does not see
+ * assignments made inside callbacks or cleanups, so `if (!isCurrent)` after an `await` looks always falsy.
+ * @param {ts.Node} tsNode - TypeScript node of the value.
+ * @param {ts.TypeChecker} checker - Type checker.
+ * @returns {boolean} Whether it is a mutable variable whose type is narrower than its declared type.
+ */
+function isNarrowedMutableVariable(tsNode, checker) {
+  if (!ts.isIdentifier(tsNode)) {
+    return false;
+  }
+  const symbol = checker.getSymbolAtLocation(tsNode);
+  const declaration = symbol?.valueDeclaration;
+  if (symbol === undefined || declaration === undefined || !ts.isVariableDeclaration(declaration)) {
+    return false;
+  }
+  const declarationList = declaration.parent;
+  // Only `let` and `var` can be reassigned; `const`, `using` and `await using` cannot.
+  const keyword = ts.isVariableDeclarationList(declarationList) ? declarationList.getFirstToken()?.kind : undefined;
+  if (keyword !== ts.SyntaxKind.LetKeyword && keyword !== ts.SyntaxKind.VarKeyword) {
+    return false;
+  }
+  const declaredType = checker.getTypeOfSymbol(symbol);
+  const flowType = checker.getTypeAtLocation(tsNode);
+  return declaredType !== flowType && checker.typeToString(declaredType) !== checker.typeToString(flowType);
+}
+
+/**
  * Checks whether an expression reads an element of an array or tuple by index (`items[0]`), looking through
  * `??`, `||`, `&&`, ternaries, `as`, `!` and parentheses.
  * @param {ts.Expression} expression - Expression to inspect.
@@ -144,12 +175,23 @@ function isUncheckedIndexAccess(tsNode, checker) {
 }
 
 /**
- * Checks whether a chain starts at a global of the host environment, which code checks to detect features.
+ * Checks whether a chain starts at a global of the host environment, which code checks to detect features
+ * (`globalThis.crypto?.randomUUID`, `if (!Element.prototype.scrollIntoView)` before a polyfill).
  * @param {ts.Node} tsNode - Link of a chain.
- * @returns {boolean} Whether it is `globalThis`, `window`, `self`, `document` or `navigator`.
+ * @param {TypeServices} services - Type information.
+ * @returns {boolean} Whether it is one of `HOST_GLOBALS` or a global declared by TypeScript's own `lib` files.
  */
-function isHostGlobal(tsNode) {
-  return ts.isIdentifier(tsNode) && HOST_GLOBALS.has(tsNode.text);
+function isHostGlobal(tsNode, services) {
+  if (!ts.isIdentifier(tsNode)) {
+    return false;
+  }
+  if (HOST_GLOBALS.has(tsNode.text)) {
+    return true;
+  }
+  // Packages merge their own declarations into these globals (`@types/react` declares an empty `Element`), so one
+  // declaration in a `lib` file is enough.
+  const declarations = services.checker.getSymbolAtLocation(tsNode)?.declarations ?? [];
+  return declarations.some((declaration) => services.isDefaultLibrary(declaration.getSourceFile()));
 }
 
 /**
@@ -202,7 +244,11 @@ function isUnreliableChain(value, services) {
   /** @type {ts.Node | undefined} */
   let link = value;
   while (link !== undefined) {
-    if (isNarrowedPropertyRead(link, services.checker) || isHostGlobal(link)) {
+    if (
+      isNarrowedPropertyRead(link, services.checker) ||
+      isNarrowedMutableVariable(link, services.checker) ||
+      isHostGlobal(link, services)
+    ) {
       return true;
     }
     const readsIndex =
@@ -247,6 +293,7 @@ function readTypeServices(context) {
     checker: program.getTypeChecker(),
     toTsNode: (node) => esTreeNodeToTSNodeMap.get(node),
     checksIndexedAccess: program.getCompilerOptions().noUncheckedIndexedAccess === true,
+    isDefaultLibrary: (sourceFile) => program.isSourceFileDefaultLibrary(sourceFile),
   };
 }
 

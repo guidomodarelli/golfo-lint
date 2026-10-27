@@ -32,3 +32,25 @@ export function countOf(countsById: Record<string, number>, id: string): number 
 export function checksAnArrayAsIfItCouldBeMissing(items: string[]): number {
   return items ? items.length : 0;
 }
+
+/** The callback sets `found` to `true`, but TypeScript does not see assignments made in another function. */
+export function hasEmptyName(names: readonly string[]): boolean {
+  let found = false;
+  names.forEach((name) => {
+    if (name === "") {
+      found = true;
+    }
+  });
+  if (found) {
+    return true;
+  }
+  return false;
+}
+
+/** Old runtimes lack `Array.prototype.at`, although its type says it is always there. */
+export function lastItem(items: readonly string[]): string | undefined {
+  if (!Array.prototype.at) {
+    return items[items.length - 1];
+  }
+  return items.at(-1);
+}
