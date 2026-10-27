@@ -5,7 +5,6 @@
 import { runSequentially } from "../command-helpers.js";
 import {
   architectureCommand,
-  complexityCommand,
   duplicatesCommand,
   reactCommand,
   stylesCommand,
@@ -21,7 +20,6 @@ import { reactScanCommand } from "./react-scan.js";
 const ANALYSIS_COMMANDS = {
   duplicates: duplicatesCommand,
   unused: unusedCommand,
-  complexity: complexityCommand,
   styles: stylesCommand,
   react: reactCommand,
   architecture: architectureCommand,

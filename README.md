@@ -2,21 +2,21 @@
 
 Reglas de calidad de código pensadas para **agentes de IA**, compartidas entre los proyectos golfo. Solo detectan defectos reales: bugs, código muerto o duplicado, complejidad, nombres poco claros, accesibilidad, CSS inválido, paquetes mal publicados, workflows rotos o inseguros, secretos, límites de arquitectura y monorepos inconsistentes.
 
-Tres decisiones definen el paquete:
+Cuatro decisiones definen el paquete:
 
 - **Ninguna regla de formato ni de estilo.** Nada de espacios, comillas, orden de imports o elegir entre dos formas equivalentes de escribir lo mismo: no cambian el comportamiento y solo agregan ruido. El formato es trabajo de un formateador.
 - **Todo problema es un error.** Un agente actúa sobre fallas e ignora advertencias, así que no queda ninguna regla en `warn`.
 - **No se puede silenciar una regla.** Los comentarios `eslint-disable` y `stylelint-disable` no tienen efecto o fallan: el agente tiene que corregir el código.
+- **Un hallazgo, una regla, sin falsas alarmas.** Cuando dos reglas o dos herramientas reportan lo mismo queda una sola, y las reglas que marcan código válido (sugerencias de seguridad que piden revisar algo que casi siempre está bien, consejos que rompen código correcto si se aplican sin mirar) quedan apagadas: un agente no sabe cuándo ignorar un reporte. Todo se validó corriendo los análisis sobre TuTribu y agenda-mensual.
 
 | Análisis | Herramienta | Configuración | Comando |
 | --- | --- | --- | --- |
-| Bugs, código confuso, nombres, accesibilidad, React, Next.js, tests | ESLint | `@golfo/lint/eslint` | `eslint .` |
+| Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js, tests | ESLint | `@golfo/lint/eslint` | `eslint .` |
 | CSS y SCSS inválido o frágil | Stylelint | `@golfo/lint/stylelint` | `golfo-lint styles` |
 | React: estado y efectos, rendimiento, seguridad, accesibilidad | react-doctor | — | `golfo-lint react` |
 | Código duplicado | jscpd | `@golfo/lint/jscpd` | `golfo-lint duplicates` |
-| Archivos, exports y dependencias sin uso | knip | `@golfo/lint/knip` | `golfo-lint unused` |
-| Complejidad, largo y parámetros por función | lizard | `@golfo/lint/lizard` | `golfo-lint complexity` |
-| Ciclos, paquetes no declarados, capas | dependency-cruiser | `@golfo/lint/dependency-cruiser` | `golfo-lint architecture` |
+| Archivos, exports y dependencias sin uso o sin declarar | knip | `@golfo/lint/knip` | `golfo-lint unused` |
+| Ciclos, devDependencies en producción, capas | dependency-cruiser | `@golfo/lint/dependency-cruiser` | `golfo-lint architecture` |
 | Paquete publicado: exports, archivos y tipos | publint y Are the Types Wrong | — | `golfo-lint package` |
 | Workflows de GitHub Actions | actionlint y zizmor | — | `golfo-lint workflows` |
 | Secretos en archivos o en el historial | gitleaks | — | `golfo-lint secrets` |
@@ -44,7 +44,7 @@ allowBuilds:
   unrs-resolver: true
 ```
 
-Requiere Node.js 22.13 o superior y ESLint 10. Las herramientas de npm vienen como dependencias, todas en versiones exactas: una versión nueva de un plugin puede sumar reglas que hagan fallar un proyecto que hoy pasa, así que se actualizan a propósito y validadas. lizard, actionlint y zizmor se distribuyen como paquetes de Python: `golfo-lint` los ejecuta con `uvx` en versiones fijas, así que basta con tener [uv](https://docs.astral.sh/uv/). gitleaks es un binario de Go que hay que instalar (`winget install Gitleaks.Gitleaks`, `brew install gitleaks` o desde sus [releases](https://github.com/gitleaks/gitleaks/releases)).
+Requiere Node.js 22.15 o superior y ESLint 10. Las herramientas de npm vienen como dependencias, todas en versiones exactas: una versión nueva de un plugin puede sumar reglas que hagan fallar un proyecto que hoy pasa, así que se actualizan a propósito y validadas. actionlint y zizmor se distribuyen como paquetes de Python: `golfo-lint` los ejecuta con `uvx` en versiones fijas, así que basta con tener [uv](https://docs.astral.sh/uv/). gitleaks es un binario de Go que hay que instalar (`winget install Gitleaks.Gitleaks`, `brew install gitleaks` o desde sus [releases](https://github.com/gitleaks/gitleaks/releases)).
 
 ## ESLint
 
@@ -74,9 +74,10 @@ export default createEslintConfig({
 
 Qué incluye:
 
-- **ESLint core** `recommended` más reglas como `eqeqeq` (salvo `== null`, que cubre `null` y `undefined` a propósito), `no-param-reassign`, `no-implicit-coercion`, `no-nested-ternary`, `id-length` y límites de complejidad.
-- **typescript-eslint** `strictTypeChecked`, más `switch-exhaustiveness-check`, `prefer-nullish-coalescing`, `consistent-type-imports` y `no-magic-numbers`.
-- **SonarJS** `recommended`, con complejidad cognitiva máxima de 15.
+- **ESLint core** `recommended` más reglas como `eqeqeq` (salvo `== null`, que cubre `null` y `undefined` a propósito), `no-param-reassign`, `no-implicit-coercion`, `no-nested-ternary`, `id-length` y límites de largo, profundidad y callbacks anidados.
+- **typescript-eslint** `strictTypeChecked`, más `switch-exhaustiveness-check`, `prefer-nullish-coalescing`, `consistent-type-imports`, `no-magic-numbers` y `require-array-sort-compare` (los arrays de strings pueden ordenarse sin función: ids y claves canónicas se ordenan por código a propósito, y `localeCompare` haría depender el orden del idioma).
+- **`golfo-lint/no-unnecessary-condition`** en lugar de `@typescript-eslint/no-unnecessary-condition`: la misma regla sin los reportes que se apoyan en tipos que TypeScript no puede conocer. TypeScript sigue considerando estrechada una propiedad después de un `await` o de una llamada, aunque pueda haber cambiado (`if (signal.aborted) return; await fetch(...); if (signal.aborted) ...`); sin `noUncheckedIndexedAccess`, un elemento de un array o una entrada de un record (`items[0]`, `countsById[id]`) parece siempre presente; y las APIs del navegador parecen estar siempre, aunque falten en el servidor o fuera de un contexto seguro (`globalThis.crypto?.randomUUID`). Un agente que sigue esos reportes borra un chequeo que el código necesita.
+- **SonarJS** `recommended`, con complejidad cognitiva máxima de 15. Es la única medida de complejidad: cuenta lo que hace difícil leer una función (anidamiento, cortes del flujo) y no cada `case` de un `switch` plano, así que la complejidad ciclomática de ESLint (`complexity`) no se usa.
 - **unicorn** `unopinionated`, más `catch-error-name` (el error del `catch` se llama `error`) y `name-replacements` con una lista propia que solo expande abreviaturas (`err`, `msg`, `btn`, `ctx`...). Los reemplazos de unicorn quedan apagados porque también abrevian (`application` por `app`).
 - **import-x**: imports duplicados, exports mutables, auto-imports y rutas inútiles. Las reglas que repiten lo que TypeScript ya verifica (`named`, `default`, `namespace`, `no-unresolved`) quedan apagadas, y los ciclos los revisa `golfo-lint architecture` para todo el repositorio, mucho más rápido.
 - **promise** y **regexp** `recommended`.
@@ -89,22 +90,26 @@ Para garantizar que no haya reglas de formato ni de estilo, el preset apaga al f
 
 - todas las reglas de tipo `layout` de sus plugins;
 - `STYLISTIC_SUGGESTION_RULES`: preferencias de sintaxis, como `window` o `globalThis`, `.replace(/x/g)` o `.replaceAll`, `[^\d]` o `\D`, `if` o ternario, `.then` o `await`. El tipo que declaran los plugins no las distingue (algunas son `problem`), por eso están listadas una por una;
-- `DUPLICATED_RULES`: reglas que reportan lo mismo que otra regla activa, para que un agente no reciba dos veces el mismo hallazgo.
+- `DUPLICATED_RULES`: reglas que reportan lo mismo que otra regla activa o que otro análisis de golfo-lint (secretos: gitleaks), para que un agente no reciba dos veces el mismo hallazgo;
+- `NON_DEFECT_RULES`: reglas que marcan código válido, como los *security hotspots* de SonarJS (`spawn("git")` resuelto por `PATH`, URLs `http://` en tests, `Math.random()` para un jitter) o `no-promise-executor-return` en `new Promise((resolve) => setTimeout(resolve, ms))`.
 
 Los tests lo verifican sobre la configuración final, igual que que no quede ninguna regla en `warn`. Las listas salieron de correr el preset sobre TuTribu y agenda-mensual.
 
-TypeScript 7 todavía no es compatible con typescript-eslint, así que el paquete trae su propio TypeScript 6 solo para el análisis.
+En los tests se permiten `any` (cuerpos JSON sin tipo, `expect.any()`) y `!` (si el valor falta, el test falla ahí mismo).
 
-## Límites compartidos
+TypeScript 7 todavía no es compatible con typescript-eslint ni con dependency-cruiser, así que el paquete trae su propio TypeScript 6 solo para el análisis, también en proyectos que compilan con TypeScript 7.
 
-ESLint y lizard usan los mismos límites por función:
+En un proyecto grande, el análisis con tipos tarda: unos 12 minutos para las 200.000 líneas de TuTribu. `--concurrency auto` reparte los archivos entre hilos (cada uno arma su propio programa de TypeScript, así que usa más memoria).
+
+## Límites
+
+Límites por función del preset de ESLint:
 
 | Límite | Valor |
 | --- | --- |
-| Complejidad ciclomática | 10 |
 | Complejidad cognitiva (SonarJS) | 15 |
 | Líneas de código (sin vacías ni comentarios) | 80 |
-| Parámetros (solo ESLint: lizard cuenta cada prop desestructurada como parámetro) | 4 |
+| Parámetros | 4 |
 | Profundidad de bloques | 4 |
 | Callbacks anidados | 3 |
 
@@ -112,7 +117,7 @@ En los tests se relajan el largo de función, los callbacks anidados, los númer
 
 ## Stylelint
 
-`golfo-lint styles` analiza `**/*.{css,scss}`. Parte de `stylelint-config-recommended-scss`, que solo trae reglas que detectan errores, y suma: anidamiento máximo de 3, hasta 4 selectores compuestos y sin propiedades redundantes; en CSS Modules, además, sin `!important` ni ids (los estilos globales pueden usar `html.dark` o `#__next`). Acepta `:global` de CSS Modules y las at-rules de Tailwind 4, y apaga las reglas de estilo de `recommended-scss` (saltos de línea alrededor de operadores, cómo se escribe la ruta de un `@use`, líneas vacías en comentarios). Los comentarios `stylelint-disable` se ignoran.
+`golfo-lint styles` analiza `**/*.{css,scss}`. Parte de `stylelint-config-recommended-scss`, que solo trae reglas que detectan errores, y suma: anidamiento máximo de 3 y hasta 4 selectores compuestos; en CSS Modules, además, sin `!important` ni ids (los estilos globales pueden usar `html.dark` o `#__next`). Acepta `:global` de CSS Modules y las at-rules de Tailwind 4, y apaga las reglas de estilo de `recommended-scss` (saltos de línea alrededor de operadores, cómo se escribe la ruta de un `@use`, líneas vacías en comentarios). Los comentarios `stylelint-disable` se ignoran.
 
 ```js
 // stylelint.config.js
@@ -125,7 +130,9 @@ Con `bem: true`, las clases deben seguir BEM: bloque en PascalCase, elementos en
 
 ## dependency-cruiser
 
-`golfo-lint architecture` analiza `src`, `app`, `components`, `lib`, `hooks` y `bin`. Prohíbe ciclos, imports que no resuelven, paquetes que no están en `package.json`, devDependencies importadas desde código de producción, tests importados desde producción y módulos de Node.js deprecados. Cada regla explica qué hacer en lugar del import prohibido.
+`golfo-lint architecture` analiza `src`, `app`, `components`, `lib`, `hooks` y `bin`. Prohíbe ciclos, devDependencies importadas desde código de producción, tests importados desde producción y módulos de Node.js deprecados. Cada regla explica qué hacer en lugar del import prohibido. Los imports que no resuelven y los paquetes que faltan en `package.json` los reporta `golfo-lint unused` (knip), que además conoce los paquetes que pone un framework.
+
+dependency-cruiser no soporta TypeScript 7 y, si lo encuentra en el proyecto, saltea en silencio todos los archivos `.ts`: el chequeo pasaba sin analizar nada. `golfo-lint architecture` le hace usar el TypeScript 6 de `@golfo/lint` con un hook de resolución que carga con `--import`.
 
 ```js
 // .dependency-cruiser.js
@@ -140,11 +147,10 @@ export default createDependencyCruiserConfig({
 
 Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no puede depender de `application` ni de `infrastructure`, y `application` no puede depender de `infrastructure`.
 
-## jscpd, knip y lizard
+## jscpd y knip
 
 - `golfo-lint duplicates` falla cuando más del 1 % de las líneas está duplicado (bloques de al menos 50 tokens y 5 líneas). Un `.jscpd.json` del proyecto reemplaza los valores compartidos.
-- `golfo-lint unused` corre knip. Para partir de los valores compartidos, exportá `createKnipConfig()` de `@golfo/lint/knip` en `knip.config.js`.
-- `golfo-lint complexity` corre lizard con los límites compartidos. Lo busca instalado, después con `uvx lizard@1.24.1` y después con `python -m lizard`.
+- `golfo-lint unused` corre knip con la configuración compartida, salvo que el proyecto tenga la suya. La compartida no reporta los exports de tipos que usa su propio archivo, toma la config de `@golfo/rp` como entrada (golfo-rp lee sus exports) y, en Next.js, acepta `server-only` y `client-only` sin declararlos: Next.js los resuelve solo y su documentación hace opcional instalarlos. Para sumar entradas o ignorar algo, exportá `createKnipConfig({ ... })` de `@golfo/lint/knip` en `knip.config.js`.
 
 ## react-doctor
 
@@ -153,6 +159,13 @@ Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no
 - `--blocking warning`: las advertencias también fallan.
 - `--no-respect-inline-disables`: los comentarios que silencian reglas no tienen efecto.
 - `--no-telemetry` y `--no-supply-chain`: no envía datos de uso, el score ni la lista de dependencias a servicios externos.
+
+golfo-lint lee el reporte JSON de react-doctor y muestra solo lo que ningún otro análisis reporta:
+
+- las reglas de ESLint, typescript-eslint, React Compiler (`react-hooks-js`) y knip que react-doctor vuelve a correr, más sus copias de jsx-a11y, de `react-you-might-not-need-an-effect` y de los límites de tamaño y complejidad. Su copia de React Compiler además toma por hooks a propiedades como `modules.auth.useCases` y a métodos `use...`, y su regla `todo` reporta sintaxis que el compilador todavía no soporta (`try`/`finally`), que es código válido;
+- los consejos que rompen código correcto si se aplican sin mirar: paralelizar `await` en serie (escrituras en una transacción, pasos en orden), usar un `Set` para arrays de pocos elementos, `useState` inicializado desde una prop para editar una copia, formularios que se envían con JavaScript, pedidos desde un efecto, Fast Refresh, y la migración de Zod 3 a 4 en proyectos que ya usan Zod 4;
+- `type={CONSTANTE}` en botones, que react-doctor no sabe leer y TypeScript ya valida;
+- las páginas HTML y los workflows, que no son código de React.
 
 Un `doctor.config.ts` del proyecto puede ajustar reglas. react-doctor usa una licencia MIT modificada que pide permiso para usarlo como datos de entrenamiento de IA o para venderlo como servicio; usarlo como linter no está restringido.
 
@@ -187,8 +200,8 @@ Para sacarlo: borrá esas dos líneas (o el `instrumentation-client` que creó, 
 ## Paquetes, workflows, secretos y monorepos
 
 - `golfo-lint package`, en paquetes publicables: publint en modo estricto y Are the Types Wrong sobre el resultado de `npm pack`, con el perfil `esm-only` cuando el paquete es ESM y no ofrece `require`.
-- `golfo-lint workflows`: actionlint (sintaxis, expresiones, scripts de shell) y zizmor (inyecciones, acciones sin fijar a un commit, credenciales persistidas), que falla desde la severidad media.
-- `golfo-lint secrets`: gitleaks sobre todo el historial de git, o sobre los archivos de la carpeta fuera de un repositorio, con todas sus reglas. La única excepción es la regla genérica `generic-api-key` en tests y Markdown, donde solo encuentra placeholders; las reglas de proveedores (GitHub, AWS, Stripe...) aplican en todos lados. Un `.gitleaks.toml` del proyecto reemplaza la configuración compartida. Los hallazgos se muestran redactados.
+- `golfo-lint workflows`: actionlint (sintaxis, expresiones, scripts de shell) y zizmor (inyecciones, acciones sin fijar a un commit, credenciales persistidas), que falla desde la severidad media. actionlint todavía no conoce los pasos en segundo plano de GitHub Actions (`background`, `wait`, `wait-all`, `cancel` y `parallel`) y los marca como errores de sintaxis: golfo-lint le pasa esos workflows reescritos con pasos equivalentes, sin mover ninguna línea, así que igual revisa los pasos de cada grupo `parallel` y reporta la línea y la columna originales.
+- `golfo-lint secrets`: gitleaks sobre todo el historial de git, o sobre los archivos de la carpeta fuera de un repositorio, con todas sus reglas. Hay dos excepciones: la regla genérica `generic-api-key` en tests y Markdown, donde solo encuentra placeholders, y los hashes de contenido de 16 caracteres que golfo-kit guarda en `.golfo/skill-coverage/`; las reglas de proveedores (GitHub, AWS, Stripe...) aplican en todos lados, también a cualquier otro valor de esos archivos. Un `.gitleaks.toml` del proyecto reemplaza la configuración compartida. Los hallazgos se muestran redactados.
 - `golfo-lint monorepo`, con workspaces: sherif (versiones distintas de una dependencia, campos faltantes), sin su regla de ordenar dependencias.
 
 Sin argumentos, cada comando analiza la carpeta actual con los valores compartidos; los argumentos se pasan tal cual a la herramienta.
@@ -198,7 +211,7 @@ Sin argumentos, cada comando analiza la carpeta actual con los valores compartid
 | Código | Significado |
 | --- | --- |
 | 0 | El análisis pasó o no aplica al proyecto. |
-| 1 o más | El análisis encontró problemas (cada herramienta usa su propio código). |
+| 1 o más | El análisis encontró problemas (cada herramienta usa su propio código; `golfo-lint react` usa 1). |
 | 2 | Análisis desconocido o sin análisis. |
 | 3 | No se pudo ejecutar la herramienta. |
 | 4 | `golfo-lint react-scan` no encontró dónde conectar react-scan y no cambió nada. |
@@ -214,4 +227,4 @@ npm run check:packed-install
 
 `check:packed-install` empaqueta el paquete con `npm pack`, lo instala con pnpm en un proyecto de prueba temporal y verifica que el preset de ESLint, la config de Stylelint y cada subcomando encuentren sus plugins y ejecutables, como le pasaría a un proyecto real. Necesita pnpm y acceso al registry.
 
-Los tests ejecutan las herramientas reales sobre `test/fixtures`. Los que necesitan `uvx` o `gitleaks` se saltean si no están instalados; el CI instala los dos. Los releases se publican con `npm run create-version` (`@golfo/rp`). Las reglas para agentes que trabajan en este repositorio están en [AGENTS.md](AGENTS.md).
+Los tests ejecutan las herramientas reales sobre `test/fixtures`. Los que necesitan `uvx` (actionlint y zizmor) o `gitleaks` se saltean si no están instalados; el CI instala los dos. Los releases se publican con `npm run create-version` (`@golfo/rp`). Las reglas para agentes que trabajan en este repositorio están en [AGENTS.md](AGENTS.md).

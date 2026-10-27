@@ -5,7 +5,6 @@ import { LINT_COMMANDS } from "../../src/cli/commands/index.js";
 import { EXIT_CODE_SUCCESS, EXIT_CODE_USAGE_ERROR } from "../../src/cli/constants.js";
 import { formatUsage, runCli } from "../../src/cli/run-cli.js";
 import { spawnTool } from "../../src/cli/spawn-tool.js";
-import { findLizardCommand } from "../../src/lizard/index.js";
 
 /** Exit code the analysis tools return when they find problems. */
 const EXIT_CODE_PROBLEMS_FOUND = 1;
@@ -74,14 +73,4 @@ describe("runCli", () => {
     const options = createSilentOptions();
     assert.equal(await runCli(["unused"], { ...options, cwd: fixturePath("knip-project") }), EXIT_CODE_PROBLEMS_FOUND);
   });
-
-  it(
-    "complexity detecta funciones demasiado complejas con lizard",
-    { skip: findLizardCommand() === undefined && "lizard no está disponible (ni uvx ni Python con lizard)" },
-    async () => {
-      const options = createSilentOptions();
-      assert.equal(await runCli(["complexity"], { ...options, cwd: fixturePath("complex") }), EXIT_CODE_PROBLEMS_FOUND);
-      assert.equal(await runCli(["complexity"], { ...options, cwd: fixturePath("duplicated") }), EXIT_CODE_SUCCESS);
-    },
-  );
 });

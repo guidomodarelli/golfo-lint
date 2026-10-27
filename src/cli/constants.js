@@ -15,6 +15,9 @@ export const JSCPD_PROJECT_CONFIG_FILE = ".jscpd.json";
 /** Exit code of a run whose checks all passed. */
 export const EXIT_CODE_SUCCESS = 0;
 
+/** Exit code of a run whose analysis found problems, when golfo-lint reports them itself. */
+export const EXIT_CODE_PROBLEMS_FOUND = 1;
+
 /** Exit code of a run whose subcommand was not recognized. */
 export const EXIT_CODE_USAGE_ERROR = 2;
 

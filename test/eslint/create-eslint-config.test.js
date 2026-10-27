@@ -108,13 +108,24 @@ describe("createEslintConfig", () => {
     assert.ok(ruleIds.includes("unicorn/catch-error-name"));
   });
 
-  it("reporta números mágicos y funciones demasiado complejas", async () => {
-    const branches = Array.from({ length: 11 }, (_, index) => `  if (value === "${String(index)}") { return; }`);
+  it("reporta números mágicos y funciones demasiado complejas, una sola vez", async () => {
+    const branches = Array.from({ length: 16 }, (_, index) => `  if (value === "${String(index)}") { return; }`);
     const ruleIds = await lintSnippet(
       ["export function check(value) {", ...branches, "}", "export const toMilliseconds = (seconds) => seconds * 1000;"].join("\n"),
     );
-    assert.ok(ruleIds.includes("complexity"));
+    assert.ok(ruleIds.includes("sonarjs/cognitive-complexity"));
+    assert.ok(!ruleIds.includes("complexity"));
     assert.ok(ruleIds.includes("@typescript-eslint/no-magic-numbers"));
+  });
+
+  it("no reporta condiciones que dependen de narrowing que TypeScript no puede sostener", async () => {
+    const [result] = await createLinter({}).lintFiles(["unnecessary-conditions.ts"]);
+    const reportedLines = result.messages
+      .filter((message) => message.ruleId === "golfo-lint/no-unnecessary-condition")
+      .map((message) => message.line);
+    const realCheckLine = 33;
+    assert.deepEqual(reportedLines, [realCheckLine]);
+    assert.ok(!result.messages.some((message) => message.ruleId === "@typescript-eslint/no-unnecessary-condition"));
   });
 
   it("con tipos, reporta promesas que nadie espera", async () => {

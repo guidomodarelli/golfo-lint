@@ -1,10 +1,6 @@
 /**
- * @module shared/thresholds Size and complexity limits shared by ESLint and lizard, so both tools flag the
- * same functions: ESLint gives feedback in the editor and lizard checks the whole repository.
+ * @module shared/thresholds Size and complexity limits of the ESLint preset, and the paths every tool skips.
  */
-
-/** Highest cyclomatic complexity a function may have. */
-export const MAX_CYCLOMATIC_COMPLEXITY = 10;
 
 /** Highest cognitive complexity a function may have (SonarJS). */
 export const MAX_COGNITIVE_COMPLEXITY = 15;

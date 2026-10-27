@@ -37,11 +37,16 @@ export const STYLISTIC_SUGGESTION_RULES = [
   "regexp/sort-flags",
   "regexp/unicode-escape",
   "regexp/use-ignore-case",
-  // SonarJS: type and test layout preferences.
+  // SonarJS: type and test layout preferences (`expect(a === b).toBe(true)` or `expect(a).toBe(b)`).
   "sonarjs/parameterized-tests",
+  "sonarjs/prefer-specific-assertions",
   "sonarjs/redundant-type-aliases",
   "sonarjs/use-type-alias",
   "sonarjs/void-use",
+  // Template literals inside template literals, and multiline blocks without braces: how the code is laid out,
+  // which a formatter settles (`if (ready) start(); stop();` on one line becomes two lines with their indentation).
+  "sonarjs/no-nested-template-literals",
+  "sonarjs/no-unenclosed-multiline-block",
   // unicorn: control flow written another way (`if` or ternary, `.then` or `await`, early return or `else`).
   "unicorn/consistent-conditional-object-spread",
   "unicorn/no-declarations-before-early-exit",
@@ -69,6 +74,9 @@ export const STYLISTIC_SUGGESTION_RULES = [
   "unicorn/consistent-compound-words",
   "unicorn/import-style",
   "unicorn/no-for-each",
+  // `[...items].sort()` and `items.toSorted()` do the same.
+  "unicorn/no-array-reverse",
+  "unicorn/no-array-sort",
   "unicorn/no-unnecessary-global-this",
   "unicorn/prefer-add-event-listener-options",
   "unicorn/prefer-array-from-map",
@@ -101,6 +109,9 @@ export const STYLISTIC_SUGGESTION_RULES = [
   "unicorn/prefer-unicode-code-point-escapes",
   "unicorn/template-indent",
   "unicorn/text-encoding-identifier-case",
+  // vitest: `toHaveBeenCalledOnce()` plus `toHaveBeenCalledWith()` or one `toHaveBeenCalledExactlyOnceWith()`. Its
+  // fix also crashes ESLint ("Fix objects must not be overlapped") when both assertions share a line.
+  "vitest/prefer-called-exactly-once-with",
   // promise: the name of the executor parameters, and returning from a `then` callback that has nothing to return.
   "promise/always-return",
   "promise/param-names",
@@ -128,7 +139,50 @@ export const DUPLICATED_RULES = [
   // `regexp/no-super-linear-backtracking` and `sonarjs/super-linear-regex` stay: they find different cases.
   // `unicorn/prefer-boolean-return` is a syntax preference, so neither stays.
   "sonarjs/prefer-single-boolean-return",
+  // `@typescript-eslint/require-array-sort-compare` stays: it knows the element type and accepts arrays of
+  // strings, which these two report and push towards `localeCompare`, whose order changes with the locale.
+  "sonarjs/no-alphabetical-sort",
+  "unicorn/require-array-sort-compare",
   // `import-x/no-cycle` and dependency-cruiser's `no-circular` both stay: one in the editor, one per repository.
+  // `@typescript-eslint/no-unused-vars` stays.
+  "sonarjs/no-unused-vars",
+  "sonarjs/unused-import",
+  // `no-useless-assignment` stays.
+  "sonarjs/no-dead-store",
+  // `max-nested-callbacks` stays.
+  "sonarjs/no-nested-functions",
+  // Committed secrets: `golfo-lint secrets` (gitleaks) checks every file and the whole history.
+  "sonarjs/no-hardcoded-passwords",
+  "sonarjs/no-hardcoded-secrets",
+];
+
+/**
+ * Rules that report valid code: security hotspots that ask to review something that is usually fine, and rules
+ * that forbid a correct pattern. An agent cannot tell when to leave the code as it is, so they stay off.
+ */
+export const NON_DEFECT_RULES = [
+  // SonarJS security hotspots ("make sure ... is safe here"): `spawn("git")` resolved through `PATH`, public DNS
+  // addresses, `http://` URLs in tests, `Math.random()` for jitter.
+  "sonarjs/no-clear-text-protocols",
+  "sonarjs/no-hardcoded-ip",
+  "sonarjs/no-os-command-from-path",
+  "sonarjs/os-command",
+  "sonarjs/pseudo-random",
+  // `new Promise((resolve) => setTimeout(resolve, ms))` returns the timer id, which nobody reads.
+  "no-promise-executor-return",
+  // Scripts that export their functions so tests can import them.
+  "unicorn/no-exports-in-scripts",
+  // Errors that copy `name` and `stack` from another error, or tests that build an `AbortError`.
+  "unicorn/no-error-property-assignment",
+  // Loops whose flag an `await`ed callback or another async path sets (`while (!stopped)`): the rule only sees
+  // assignments inside the loop.
+  "no-unmodified-loop-condition",
+  // Methods taken from objects that bind them (`const { push } = useRouter()`): the rule only sees method syntax
+  // in the type.
+  "@typescript-eslint/unbound-method",
+  // `delete draft[id]` on a copy of a record, and `void` as the type argument of a call (`transact<void>(...)`).
+  "@typescript-eslint/no-dynamic-delete",
+  "@typescript-eslint/no-invalid-void-type",
 ];
 
 /**

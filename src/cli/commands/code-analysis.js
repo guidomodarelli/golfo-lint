@@ -1,20 +1,26 @@
 /**
  * @module cli/commands/code-analysis Subcommands that analyze source code: duplication (jscpd), unused code
- * (knip), complexity (lizard), styles (Stylelint), architecture (dependency-cruiser) and React (react-doctor).
+ * (knip), styles (Stylelint), architecture (dependency-cruiser) and React (react-doctor).
  */
-import { fileURLToPath } from "node:url";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createJscpdArguments } from "../../jscpd/create-jscpd-arguments.js";
-import { createLizardArguments, LIZARD_VERSION } from "../../lizard/create-lizard-arguments.js";
-import { LIZARD_CANDIDATES } from "../../lizard/find-lizard-command.js";
 import {
   dependsOnReact,
   hasAnyPath,
   readProjectManifest,
-  runExternalTool,
   runPackageBin,
   withDefaultPath,
 } from "../command-helpers.js";
-import { JSCPD_PROJECT_CONFIG_FILE } from "../constants.js";
+import { formatDiagnostics, isReportedDiagnostic } from "../../react-doctor/react-doctor-report.js";
+import {
+  EXIT_CODE_PROBLEMS_FOUND,
+  EXIT_CODE_SUCCESS,
+  EXIT_CODE_TOOL_UNAVAILABLE,
+  JSCPD_PROJECT_CONFIG_FILE,
+} from "../constants.js";
 
 /** @typedef {import("../command-helpers.js").LintCommand} LintCommand */
 
@@ -31,6 +37,21 @@ const STYLELINT_PROJECT_CONFIG_FILES = [
   "stylelint.config.cjs",
   "stylelint.config.mjs",
   "stylelint.config.ts",
+];
+
+/** Files where a project keeps its own knip config, which then replaces the shared one. */
+const KNIP_PROJECT_CONFIG_FILES = [
+  "knip.json",
+  "knip.jsonc",
+  ".knip.json",
+  ".knip.jsonc",
+  "knip.js",
+  "knip.ts",
+  "knip.config.js",
+  "knip.config.ts",
+  "knip.config.mjs",
+  "knip.config.mts",
+  "knip.config.cjs",
 ];
 
 /** Style files analyzed when `styles` gets no arguments. */
@@ -75,19 +96,14 @@ export const unusedCommand = {
   description: "Archivos, exports y dependencias sin uso (knip).",
   skipReason: (cwd) => (readProjectManifest(cwd) === undefined ? "no hay package.json" : undefined),
   run(context) {
-    return runPackageBin(context, { packageName: "knip", binName: "knip", arguments: context.toolArguments });
-  },
-};
-
-/** @type {LintCommand} */
-export const complexityCommand = {
-  description: "Funciones demasiado complejas, largas o con muchos parámetros (lizard).",
-  run(context) {
-    return runExternalTool(context, {
-      name: "lizard",
-      candidates: LIZARD_CANDIDATES,
-      installHint: `Instalá uv (https://docs.astral.sh/uv/) para ejecutarlo con uvx, o: pip install lizard==${LIZARD_VERSION}`,
-      arguments: [...createLizardArguments(), ...withDefaultPath(context.toolArguments)],
+    // A project config owns the configuration; without one, knip gets the shared defaults instead of its own.
+    const hasProjectConfig =
+      hasAnyPath(context.cwd, KNIP_PROJECT_CONFIG_FILES) || readProjectManifest(context.cwd)?.knip !== undefined;
+    const configArguments = hasProjectConfig ? [] : ["--config", sharedConfigPath("knip/default.config.js")];
+    return runPackageBin(context, {
+      packageName: "knip",
+      binName: "knip",
+      arguments: [...configArguments, ...context.toolArguments],
     });
   },
 };
@@ -122,6 +138,8 @@ export const architectureCommand = {
       packageName: "dependency-cruiser",
       binName: "depcruise",
       arguments: ["--config", projectConfig ?? sharedConfigPath("dependency-cruiser/default.config.js"), ...sources],
+      // dependency-cruiser would use the project's TypeScript, and skip every `.ts` file when it is 7 or newer.
+      nodeArguments: ["--import", pathToFileURL(sharedConfigPath("dependency-cruiser/typescript-resolution-hook.js")).href],
     });
   },
 };
@@ -138,7 +156,6 @@ export const REACT_DOCTOR_VERSION = "0.9.18";
  */
 const REACT_DOCTOR_ARGUMENTS = [
   "--yes",
-  "--verbose",
   "--blocking",
   "warning",
   "--no-respect-inline-disables",
@@ -146,17 +163,54 @@ const REACT_DOCTOR_ARGUMENTS = [
   "--no-supply-chain",
 ];
 
+/**
+ * Reads the JSON report react-doctor wrote.
+ * @param {string} reportPath - Path of the report.
+ * @returns {import("../../react-doctor/react-doctor-report.js").ReactDoctorReport | undefined} Parsed report, or
+ * `undefined` when react-doctor did not write one.
+ */
+function readReactDoctorReport(reportPath) {
+  if (!existsSync(reportPath)) {
+    return undefined;
+  }
+  return /** @type {import("../../react-doctor/react-doctor-report.js").ReactDoctorReport} */ (
+    JSON.parse(readFileSync(reportPath, "utf8"))
+  );
+}
+
 /** @type {LintCommand} */
 export const reactCommand = {
   description: "React: estado y efectos, rendimiento, seguridad y accesibilidad (react-doctor).",
   skipReason: (cwd) => (dependsOnReact(cwd) ? undefined : "el proyecto no depende de react"),
-  run(context) {
-    return runPackageBin(context, {
-      packageName: "react-doctor",
-      binName: "react-doctor",
-      arguments: [...REACT_DOCTOR_ARGUMENTS, ...context.toolArguments],
-      installedByProject: true,
-      installHint: `Es opcional: instalalo en el proyecto con pnpm add -D --save-exact react-doctor@${REACT_DOCTOR_VERSION}`,
-    });
+  async run(context) {
+    // react-doctor writes a JSON report that golfo-lint filters: its own output repeats ESLint findings.
+    const reportDirectory = mkdtempSync(path.join(os.tmpdir(), "golfo-lint-react-doctor-"));
+    const reportPath = path.join(reportDirectory, "report.json");
+    try {
+      const exitCode = await runPackageBin(context, {
+        packageName: "react-doctor",
+        binName: "react-doctor",
+        arguments: [...REACT_DOCTOR_ARGUMENTS, "--json", "--json-out", reportPath, ...context.toolArguments],
+        installedByProject: true,
+        installHint: `Es opcional: instalalo en el proyecto con pnpm add -D --save-exact react-doctor@${REACT_DOCTOR_VERSION}`,
+      });
+      if (exitCode === EXIT_CODE_TOOL_UNAVAILABLE) {
+        return exitCode;
+      }
+      const report = readReactDoctorReport(reportPath);
+      if (report?.diagnostics === undefined || (report.error !== undefined && report.error !== null)) {
+        context.warn(`golfo-lint: react-doctor no pudo analizar el proyecto: ${JSON.stringify(report?.error ?? "no escribió el reporte")}`);
+        return EXIT_CODE_TOOL_UNAVAILABLE;
+      }
+      const diagnostics = report.diagnostics.filter((diagnostic) => isReportedDiagnostic(diagnostic));
+      if (diagnostics.length === 0) {
+        context.log("react-doctor: sin problemas.");
+        return EXIT_CODE_SUCCESS;
+      }
+      context.warn(formatDiagnostics(diagnostics));
+      return EXIT_CODE_PROBLEMS_FOUND;
+    } finally {
+      rmSync(reportDirectory, { recursive: true, force: true });
+    }
   },
 };

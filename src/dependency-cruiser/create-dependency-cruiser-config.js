@@ -1,7 +1,7 @@
 /**
  * @module dependency-cruiser/create-dependency-cruiser-config Builds the dependency-cruiser config: cycles,
- * imports of undeclared or dev-only packages, production code that imports tests and, optionally, the
- * boundaries of a hexagonal architecture.
+ * imports of dev-only packages from production code, production code that imports tests, deprecated Node.js
+ * modules and, optionally, the boundaries of a hexagonal architecture.
  */
 
 /** Production code folders of the golfo projects. */
@@ -55,20 +55,8 @@ const BASE_RULES = /** @type {ForbiddenRule[]} */ ([
     from: {},
     to: { circular: true },
   },
-  {
-    name: "not-to-unresolvable",
-    severity: "error",
-    comment: "El import no resuelve a ningún archivo ni paquete.",
-    from: {},
-    to: { couldNotResolve: true },
-  },
-  {
-    name: "no-non-package-json",
-    severity: "error",
-    comment: "El paquete no está declarado en package.json: funciona por casualidad y se rompe al instalar limpio.",
-    from: {},
-    to: { dependencyTypes: ["npm-no-pkg", "npm-unknown"] },
-  },
+  // Imports that do not resolve and packages missing from `package.json` are reported by `golfo-lint unused`
+  // (knip), which also knows the packages a framework provides, such as `server-only` in Next.js.
   {
     name: "not-to-dev-dep",
     severity: "error",

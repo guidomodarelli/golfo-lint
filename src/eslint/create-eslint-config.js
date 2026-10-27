@@ -23,14 +23,14 @@ import tseslint from "typescript-eslint";
 import {
   IGNORED_PATH_GLOBS,
   MAX_COGNITIVE_COMPLEXITY,
-  MAX_CYCLOMATIC_COMPLEXITY,
   MAX_FUNCTION_LINES,
   MAX_FUNCTION_PARAMETERS,
   MAX_NESTED_CALLBACKS,
   MAX_NESTING_DEPTH,
   TEST_FILE_GLOBS,
 } from "../shared/thresholds.js";
-import { DUPLICATED_RULES, listFormattingRules, turnOffRules } from "./formatting-rules.js";
+import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules } from "./formatting-rules.js";
+import { noUnnecessaryCondition } from "./rules/no-unnecessary-condition.js";
 
 /** @typedef {import("eslint").Linter.Config} FlatConfig */
 
@@ -39,6 +39,9 @@ const TYPESCRIPT_FILE_GLOBS = ["**/*.{ts,tsx,mts,cts}"];
 
 /** Tool config files, whose job is the top-level side effect of exporting a computed config. */
 const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}"];
+
+/** Plugin with the rules golfo-lint writes itself, under the `golfo-lint/` prefix. */
+const GOLFO_LINT_PLUGIN = { rules: { "no-unnecessary-condition": noUnnecessaryCondition } };
 
 /** Root TypeScript config of a project. */
 const ROOT_TSCONFIG_FILE = "tsconfig.json";
@@ -154,7 +157,9 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
 function createCoreRules() {
   return {
     "array-callback-return": "error",
-    complexity: ["error", MAX_CYCLOMATIC_COMPLEXITY],
+    // Function complexity is measured by `sonarjs/cognitive-complexity`, which counts what makes code hard to
+    // read (nesting, breaks in the linear flow) and not each `case` of a flat `switch`; `complexity` would report
+    // the same functions a second time.
     "default-case-last": "error",
     // `== null` matches `null` and `undefined` on purpose; every other loose comparison is reported.
     eqeqeq: ["error", "always", { null: "ignore" }],
@@ -252,7 +257,24 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
     {
       files: TYPESCRIPT_FILE_GLOBS,
       languageOptions: { parserOptions: { ...projectOptions, tsconfigRootDir } },
+      plugins: { "golfo-lint": GOLFO_LINT_PLUGIN },
       rules: {
+        // Same rule without the reports that rest on narrowing TypeScript cannot keep (a property read again after
+        // an `await`) or on array elements typed as always present: see `rules/no-unnecessary-condition.js`.
+        "@typescript-eslint/no-unnecessary-condition": "off",
+        "golfo-lint/no-unnecessary-condition": "error",
+        // Sorting without a compare function orders numbers and objects as strings. Arrays of strings sort by code
+        // unit on purpose (stable ids, canonical keys), where `localeCompare` would make the order depend on the locale.
+        "@typescript-eslint/require-array-sort-compare": ["error", { ignoreStringArrays: true }],
+        // TypeScript and typed rules report these with the types: extra arguments are a compile error, and
+        // comparisons that are always true or false go to `golfo-lint/no-unnecessary-condition`, which knows when the
+        // types can be trusted; `@typescript-eslint/no-unnecessary-type-conversion` reports the same coercions.
+        "sonarjs/different-types-comparison": "off",
+        "sonarjs/no-extra-arguments": "off",
+        "unicorn/no-useless-coercion": "off",
+        // React ignores what an event handler returns, so `onClick={save}` with an async `save` is fine; promises
+        // passed where a callback's result is used are still reported.
+        "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],
         "@typescript-eslint/consistent-type-imports": "error",
         "@typescript-eslint/prefer-nullish-coalescing": "error",
         "@typescript-eslint/prefer-optional-chain": "error",
@@ -338,6 +360,8 @@ function createFrameworkConfigs(frameworks) {
             rules: {
               ...vitestPlugin.configs.recommended.rules,
               "vitest/no-standalone-expect": "error",
+              // `vitest/expect-expect` reports the same tests without assertions.
+              "sonarjs/assertions-in-tests": "off",
               "vitest/require-to-throw-message": "error",
               "vitest/valid-title": "error",
             },
@@ -357,8 +381,14 @@ function createTestFilesConfig(testFiles) {
     files: testFiles,
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
-      // `expect(service.save).toHaveBeenCalled()` reads a method without calling it, which is how mocks are asserted.
-      "@typescript-eslint/unbound-method": "off",
+      // Tests read untyped JSON bodies and use `expect.any()`, which are `any`, and assert values they just
+      // checked with `!`: a wrong guess fails the test right there.
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/no-magic-numbers": "off",
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
@@ -419,5 +449,6 @@ export function createEslintConfig(options = {}) {
     createDirectiveCommentsConfig(allowDisableComments),
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
     { name: "golfo-lint/no-duplicates", rules: turnOffRules(DUPLICATED_RULES) },
+    { name: "golfo-lint/no-false-alarms", rules: turnOffRules(NON_DEFECT_RULES) },
   ]);
 }

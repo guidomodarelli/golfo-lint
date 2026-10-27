@@ -17,7 +17,8 @@ The rules in this package are read and acted on by AI coding agents, not by huma
 - **No silencing.** Agents must fix the code, not hide the finding: the ESLint preset forbids directive comments (`eslint-comments/no-use`) unless a project opts into `allowDisableComments`, which still requires a description; Stylelint uses `ignoreDisables`; react-doctor runs with `--no-respect-inline-disables`.
 - **Nothing leaves the machine.** Tools run without telemetry or uploads (react-doctor with `--no-telemetry --no-supply-chain`).
 - **Actionable messages.** Prefer rules and custom rule `comment`s that say what is wrong and what to do instead, in Spanish for messages written here.
-- **Shared limits.** Size and complexity limits live in `src/shared/thresholds.js` so ESLint and lizard flag the same functions; change them there.
+- **Shared limits.** Size and complexity limits live in `src/shared/thresholds.js`; change them there. Complexity is measured once, by `sonarjs/cognitive-complexity`.
+- **No false alarms.** A rule that reports valid code (a security hotspot that asks to review something usually fine, advice that breaks correct code when applied blindly, a verdict based on types TypeScript cannot know) goes to `NON_DEFECT_RULES`, gets filtered (react-doctor findings in `src/react-doctor/react-doctor-report.js`) or gets wrapped (`src/eslint/rules/`). An agent cannot tell when to ignore a report.
 - Before adding a tool or rule, check that it works with the pinned runtimes (ESLint 10, Node.js from `.nvmrc`), that it is maintained, and that it does not duplicate a check the package already has. Document the choice in `README.md`.
 
 ## Pinned versions
@@ -30,7 +31,6 @@ Every tool runs at an exact version, because a new version of a linter or plugin
 
 | Tool | Version | Where |
 | --- | --- | --- |
-| lizard | 1.24.1 | `LIZARD_VERSION` in `src/lizard/create-lizard-arguments.js` |
 | actionlint | 1.7.12 (`actionlint-py~=1.7.12.0`) | `ACTIONLINT_PY_REQUIREMENT` in `src/workflows/workflow-tools.js` |
 | zizmor | 1.31.1 | `ZIZMOR_VERSION` in `src/workflows/workflow-tools.js` |
 | gitleaks | 8.30.1 | `GITLEAKS_VERSION` in `src/secrets/gitleaks-tool.js` and `.github/workflows/ci.yml` |
@@ -43,7 +43,7 @@ Every tool runs at an exact version, because a new version of a linter or plugin
 ## Validation
 
 - `npm run ci` runs ESLint with the package's own preset, the typecheck, the tests and `npm pack --dry-run`. `node bin/golfo-lint.js all` runs every analysis on the package itself. `npm run check:packed-install` installs the packed package with pnpm in a throwaway project and checks that every tool resolves; run it whenever dependencies, `exports` or the way a tool is located change. All three must pass before closing a change.
-- Tests run the real tools (ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, publint, attw, actionlint, zizmor, gitleaks, sherif) on `test/fixtures`; do not mock them. Tests that need `uvx` or `gitleaks` are skipped when the tool is missing, and CI installs both.
+- Tests run the real tools (ESLint, Stylelint, jscpd, knip, dependency-cruiser, react-doctor, publint, attw, actionlint, zizmor, gitleaks, sherif) on `test/fixtures`; do not mock them. Tests that need `uvx` or `gitleaks` are skipped when the tool is missing, and CI installs both.
 - Never commit a real or realistic secret, not even in a fixture: tests that need one build it at runtime.
 
 ## Changelog governance

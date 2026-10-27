@@ -64,12 +64,10 @@ export function createStylelintConfig(options = {}) {
     ignoreDisables: true,
     ignoreFiles: [...IGNORED_PATH_GLOBS, ...ignoreFiles],
     rules: {
-      "declaration-block-no-redundant-longhand-properties": true,
       "max-nesting-depth": [MAX_STYLE_NESTING_DEPTH, { ignore: ["pseudo-classes"], ignoreAtRules: ["media", "supports"] }],
       "scss/at-rule-no-unknown": [true, { ignoreAtRules: TAILWIND_AT_RULES }],
       "selector-max-compound-selectors": MAX_COMPOUND_SELECTORS,
       "selector-pseudo-class-no-unknown": [true, { ignorePseudoClasses: CSS_MODULES_PSEUDO_CLASSES }],
-      "shorthand-property-no-redundant-values": true,
       ...Object.fromEntries(STYLISTIC_RECOMMENDED_RULES.map((ruleName) => [ruleName, null])),
     },
     overrides: [

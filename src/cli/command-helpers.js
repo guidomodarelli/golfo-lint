@@ -89,9 +89,10 @@ export function dependsOnReact(cwd) {
 /**
  * Runs an executable that a dependency of `@golfo/lint` ships, with the same Node.js that runs `golfo-lint`.
  * @param {CommandContext} context - Where and how to run it.
- * @param {{ packageName: string; binName: string; arguments: string[]; installedByProject?: boolean; installHint?: string }} tool
- *   What to run. `installedByProject` searches the project first, for optional tools the project installs; `installHint`
- *   says how to install the package when it is missing.
+ * @param {{ packageName: string; binName: string; arguments: string[]; nodeArguments?: string[]; installedByProject?: boolean; installHint?: string }} tool
+ *   What to run. `nodeArguments` go to Node.js before the executable (for example `--import` of a hook);
+ *   `installedByProject` searches the project first, for optional tools the project installs; `installHint` says how to
+ *   install the package when it is missing.
  * @returns {Promise<number>} Exit code of the tool.
  */
 export async function runPackageBin(context, tool) {
@@ -102,7 +103,11 @@ export async function runPackageBin(context, tool) {
     context.warn(`golfo-lint: ${tool.packageName} no está instalado. ${tool.installHint ?? "Reinstalá @golfo/lint."}`);
     return EXIT_CODE_TOOL_UNAVAILABLE;
   }
-  return context.runTool({ command: process.execPath, arguments: [binPath, ...tool.arguments], cwd: context.cwd });
+  return context.runTool({
+    command: process.execPath,
+    arguments: [...(tool.nodeArguments ?? []), binPath, ...tool.arguments],
+    cwd: context.cwd,
+  });
 }
 
 /**

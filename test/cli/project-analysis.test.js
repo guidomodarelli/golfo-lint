@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import process from "node:process";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { REACT_DOCTOR_VERSION } from "../../src/cli/commands/code-analysis.js";
@@ -125,10 +127,35 @@ describe("golfo-lint architecture", () => {
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
   });
 
-  it("detecta paquetes que no están en package.json", async () => {
+  it("deja los paquetes que no están en package.json a golfo-lint unused, que los reporta", async () => {
     const project = createProjectWithPackages({}, 'import "dev-tool";\n');
-    const { exitCode } = await runSilently("architecture", project);
-    assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+    assert.equal((await runSilently("architecture", project)).exitCode, EXIT_CODE_SUCCESS);
+    assert.notEqual((await runSilently("unused", project)).exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("hace que dependency-cruiser use el TypeScript de golfo-lint aunque el proyecto tenga TypeScript 7", () => {
+    // A project with TypeScript 7 and dependency-cruiser installed next to it, as pnpm and npm leave them.
+    const project = createTemporaryFolder();
+    const typescriptFolder = path.join(project, "node_modules/typescript");
+    mkdirSync(typescriptFolder, { recursive: true });
+    writeFileSync(path.join(typescriptFolder, "package.json"), JSON.stringify({ name: "typescript", version: "7.0.2", main: "index.js" }));
+    writeFileSync(path.join(typescriptFolder, "index.js"), 'module.exports = { version: "7.0.2" };\n');
+    const cruiserFolder = path.join(project, "node_modules/dependency-cruiser");
+    mkdirSync(cruiserFolder, { recursive: true });
+    writeFileSync(path.join(cruiserFolder, "package.json"), JSON.stringify({ name: "dependency-cruiser", type: "module" }));
+    writeFileSync(
+      path.join(cruiserFolder, "probe.js"),
+      'import { createRequire } from "node:module";\nimport typescript from "typescript";\n' +
+        'const manifest = createRequire(import.meta.url)("typescript/package.json");\n' +
+        'console.log([typescript.version, manifest.version].join(" "));\n',
+    );
+    const hookUrl = new URL("../../src/dependency-cruiser/typescript-resolution-hook.js", import.meta.url).href;
+    const output = execFileSync(process.execPath, ["--import", hookUrl, path.join(cruiserFolder, "probe.js")], {
+      encoding: "utf8",
+    });
+    const golfoTypescriptVersion = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"))
+      .dependencies.typescript;
+    assert.equal(output.trim(), `${golfoTypescriptVersion} ${golfoTypescriptVersion}`);
   });
 
   it("deja que el código de la app importe @golfo/lint/react-scan, aunque sea una devDependency", async () => {
@@ -215,6 +242,20 @@ describe("golfo-lint workflows", { skip: findExternalCommand(ACTIONLINT_CANDIDAT
     assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
   });
 
+  it("entiende los pasos en segundo plano de GitHub Actions (background, wait, parallel)", async () => {
+    const { exitCode } = await runSilently("workflows", fixturePath("workflows-background"));
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("reporta errores dentro de un grupo parallel en la línea y columna originales", async () => {
+    const { exitCode, messages } = await runSilently("workflows", fixturePath("workflows-background-broken"));
+    assert.notEqual(exitCode, EXIT_CODE_SUCCESS);
+    assert.ok(
+      messages.some((message) => message.includes(".github/workflows/ci.yml:11:28:") && message.includes("unknown")),
+      messages.join("\n"),
+    );
+  });
+
   it("no aplica sin .github/workflows", async () => {
     const { exitCode, messages } = await runSilently("workflows", fixturePath("cycle"));
     assert.equal(exitCode, EXIT_CODE_SUCCESS);
@@ -239,6 +280,18 @@ describe("golfo-lint secrets", { skip: findExternalCommand(GITLEAKS_CANDIDATES) 
     assert.equal((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
 
     writeFileSync(path.join(testsFolder, "token.test.js"), `const token = "${createFakeGithubToken()}";\n`);
+    assert.notEqual((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
+  });
+
+  it("no reporta los hashes de .golfo/skill-coverage, pero sí un token en esos archivos", async () => {
+    const folder = createTemporaryFolder();
+    const recordsFolder = path.join(folder, ".golfo/skill-coverage/records");
+    mkdirSync(recordsFolder, { recursive: true });
+    const hashes = { "src/auth.ts#REAUTHENTICATION_TOKEN.kind": "d1a313968195f0da", "src/prices.ts#hasLinkedInvitations": "529b9e9bc654142a" };
+    writeFileSync(path.join(recordsFolder, "auth.json"), JSON.stringify({ hashes }, null, 2));
+    assert.equal((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
+
+    writeFileSync(path.join(recordsFolder, "leak.json"), JSON.stringify({ token: createFakeGithubToken() }));
     assert.notEqual((await runSilently("secrets", folder)).exitCode, EXIT_CODE_SUCCESS);
   });
 
