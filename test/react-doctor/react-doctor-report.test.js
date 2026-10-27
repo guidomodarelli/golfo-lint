@@ -55,6 +55,30 @@ describe("isReportedDiagnostic", () => {
     assert.equal(isReportedDiagnostic(diagnostic({ rule: "button-has-type", message, filePath: "components/form.jsx" })), true);
   });
 
+  it("descarta la lectura del cuerpo de un fetch cuando la respuesta se revisa después", () => {
+    const source = [
+      "async function save() {",
+      "  const response = await fetch(\"/api/save\");",
+      "  const body = await response.json().catch(() => ({}));",
+      "  if (!response.ok) throw new Error(body.message);",
+      "  return body;",
+      "}",
+    ].join("\n");
+    const fetchFinding = diagnostic({ rule: "no-fetch-response-used-without-status-check", line: 2 });
+    assert.equal(isReportedDiagnostic(fetchFinding, () => source), false);
+    const unchecked = source.replace("  if (!response.ok) throw new Error(body.message);\n", "");
+    assert.equal(isReportedDiagnostic(fetchFinding, () => unchecked), true);
+    assert.equal(isReportedDiagnostic(fetchFinding), true);
+  });
+
+  it("descarta sql.raw solo cuando todas sus llamadas del archivo reciben constantes", () => {
+    const finding = diagnostic({ rule: "raw-sql-injection-risk", filePath: "src/repository.ts", line: 1 });
+    const constants = 'await db.execute(sql.raw(EFFECT_SQL.begin));\nawait db.execute(sql.raw("rollback"));\n';
+    assert.equal(isReportedDiagnostic(finding, () => constants), false);
+    const dynamic = `${constants}const column = sql.raw(\`payload ->> '\${key}'\`);\n`;
+    assert.equal(isReportedDiagnostic(finding, () => dynamic), true);
+  });
+
   it("descarta páginas HTML y workflows, que no son código de React", () => {
     assert.equal(isReportedDiagnostic(diagnostic({ filePath: "user-guides/index.html" })), false);
     assert.equal(isReportedDiagnostic(diagnostic({ filePath: ".github/workflows/release.yml" })), false);

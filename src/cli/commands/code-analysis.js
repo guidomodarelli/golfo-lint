@@ -202,7 +202,17 @@ export const reactCommand = {
         context.warn(`golfo-lint: react-doctor no pudo analizar el proyecto: ${JSON.stringify(report?.error ?? "no escribió el reporte")}`);
         return EXIT_CODE_TOOL_UNAVAILABLE;
       }
-      const diagnostics = report.diagnostics.filter((diagnostic) => isReportedDiagnostic(diagnostic));
+      /** @type {Map<string, string | undefined>} */
+      const sources = new Map();
+      /** @param {string} filePath - Path relative to the project. */
+      const readSource = (filePath) => {
+        if (!sources.has(filePath)) {
+          const absolutePath = path.resolve(context.cwd, filePath);
+          sources.set(filePath, existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : undefined);
+        }
+        return sources.get(filePath);
+      };
+      const diagnostics = report.diagnostics.filter((diagnostic) => isReportedDiagnostic(diagnostic, readSource));
       if (diagnostics.length === 0) {
         context.log("react-doctor: sin problemas.");
         return EXIT_CODE_SUCCESS;

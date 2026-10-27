@@ -13,7 +13,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Changed
 
-- `golfo-lint react` muestra solo los hallazgos de react-doctor que ningún otro análisis reporta: deja afuera las reglas que ya corre ESLint (React Compiler, jsx-a11y, tamaño y complejidad), las páginas HTML y los workflows, y los consejos que rompen código válido si se aplican sin mirar. Termina con código 1 cuando encuentra problemas.
+- `golfo-lint react` muestra solo los hallazgos de react-doctor que ningún otro análisis reporta: deja afuera las reglas que ya corre ESLint (React Compiler, jsx-a11y, tamaño y complejidad), las páginas HTML y los workflows, y los consejos que rompen código válido si se aplican sin mirar. También descarta la lectura del cuerpo de un `fetch` que se revisa después y `sql.raw(...)` con constantes. Termina con código 1 cuando encuentra problemas.
 - La complejidad de las funciones se mide solo con `sonarjs/cognitive-complexity`; `complexity` (ciclomática) reportaba las mismas funciones otra vez.
 - Los imports que no resuelven y los paquetes que faltan en `package.json` los reporta solo `golfo-lint unused` (knip); `golfo-lint architecture` los repetía.
 - Las carpetas `mocks/`, `__mocks__/` y `dev-mocks/` pueden importar devDependencies (por ejemplo, los handlers de MSW que se cargan solo en desarrollo).

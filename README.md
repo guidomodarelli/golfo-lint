@@ -164,6 +164,7 @@ golfo-lint lee el reporte JSON de react-doctor y muestra solo lo que ningún otr
 
 - las reglas de ESLint, typescript-eslint, React Compiler (`react-hooks-js`) y knip que react-doctor vuelve a correr, más sus copias de jsx-a11y, de `react-you-might-not-need-an-effect` y de los límites de tamaño y complejidad. Su copia de React Compiler además toma por hooks a propiedades como `modules.auth.useCases` y a métodos `use...`, y su regla `todo` reporta sintaxis que el compilador todavía no soporta (`try`/`finally`), que es código válido;
 - los consejos que rompen código correcto si se aplican sin mirar: paralelizar `await` en serie (escrituras en una transacción, pasos en orden), usar un `Set` para arrays de pocos elementos, `useState` inicializado desde una prop para editar una copia, formularios que se envían con JavaScript, pedidos desde un efecto, Fast Refresh, y la migración de Zod 3 a 4 en proyectos que ya usan Zod 4;
+- la lectura del cuerpo de un `fetch` cuando el código revisa `response.ok` o `response.status` en las líneas siguientes (leer primero el mensaje de error de la API es válido), y `sql.raw(...)` cuando todas sus llamadas del archivo reciben un string fijo o una constante;
 - `type={CONSTANTE}` en botones de archivos `.tsx`, que react-doctor no sabe leer y TypeScript ya valida (en JavaScript se sigue reportando);
 - las páginas HTML y los workflows, que no son código de React.
 

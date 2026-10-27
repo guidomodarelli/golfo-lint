@@ -98,6 +98,101 @@ const TYPED_JSX_FILE_PATTERN = /\.tsx$/u;
 const NON_REACT_FILE_PATTERN = /\.(?:html?|ya?ml)$/u;
 
 /**
+ * `no-fetch-response-used-without-status-check` only accepts a status check before the body is read, but reading
+ * the body first to show the error message of the API and then checking `response.ok` is valid. The finding points
+ * at the `fetch` call; it is dropped when the variable that holds the response is checked a few lines below.
+ */
+const FETCH_STATUS_RULE = "no-fetch-response-used-without-status-check";
+
+/** Lines after the `fetch` call where a check of `ok` or `status` counts. */
+const FETCH_STATUS_CHECK_WINDOW = 40;
+
+/** What follows the name of the variable in `const response = await fetch(`, as formatters print it. */
+const FETCH_ASSIGNMENT = " = await fetch(";
+
+/** A character of a JavaScript identifier. */
+const IDENTIFIER_CHARACTER_PATTERN = /[\w$]/u;
+
+/**
+ * `raw-sql-injection-risk` reports one `sql.raw(...)` per file, also when its argument is a string literal or a
+ * constant (`sql.raw(EFFECT_SQL.begin)`), which cannot carry user input. The finding is dropped only when every
+ * `sql.raw(...)` of the file has such an argument.
+ */
+const RAW_SQL_RULE = "raw-sql-injection-risk";
+
+/** `sql.raw(` and its argument up to the closing parenthesis. */
+const RAW_SQL_CALL_PATTERN = /\bsql\.raw\((?<argument>[^()]*)\)/gu;
+
+/** Arguments of `sql.raw` that cannot carry user input: string literals without interpolation and constants. */
+const CONSTANT_SQL_ARGUMENT_PATTERNS = [
+  /^"[^"]*"$/u,
+  /^'[^']*'$/u,
+  /^`[^$`]*`$/u,
+  // `EFFECT_SQL` or `EFFECT_SQL.begin`.
+  /^[A-Z][\dA-Z_]*(?:\.[\w$]+)*$/u,
+];
+
+/**
+ * Reads a file of the project.
+ * @callback SourceReader
+ * @param {string} filePath - Path relative to the project, as react-doctor reports it.
+ * @returns {string | undefined} Its text, or `undefined` when it cannot be read.
+ */
+
+/**
+ * Reads the name of the variable a line assigns a `fetch` response to.
+ * @param {string} line - Line of the `fetch` call.
+ * @returns {string | undefined} `response` in `const response = await fetch(`, or `undefined`.
+ */
+function readAssignedFetchVariable(line) {
+  const assignmentStart = line.indexOf(FETCH_ASSIGNMENT);
+  let nameStart = assignmentStart;
+  while (nameStart > 0 && IDENTIFIER_CHARACTER_PATTERN.test(line.charAt(nameStart - 1))) {
+    nameStart -= 1;
+  }
+  return assignmentStart > 0 && nameStart < assignmentStart ? line.slice(nameStart, assignmentStart) : undefined;
+}
+
+/**
+ * Checks whether the response of the `fetch` call a finding points at is checked a few lines below.
+ * @param {ReactDoctorDiagnostic} diagnostic - Finding.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @returns {boolean} Whether `<response>.ok` or `<response>.status` is read after the call.
+ */
+function checksFetchStatusLater(diagnostic, readSource) {
+  const lines = readSource(diagnostic.filePath)?.split("\n");
+  if (lines === undefined) {
+    return false;
+  }
+  const name = readAssignedFetchVariable(lines[diagnostic.line - 1] ?? "");
+  if (name === undefined) {
+    return false;
+  }
+  const statusCheck = new RegExp(String.raw`\b${name.replaceAll("$", String.raw`\$`)}\.(?:ok|status)\b`, "u");
+  return lines.slice(diagnostic.line, diagnostic.line + FETCH_STATUS_CHECK_WINDOW).some((line) => statusCheck.test(line));
+}
+
+/**
+ * Checks whether every `sql.raw(...)` of a file takes a literal or a constant.
+ * @param {ReactDoctorDiagnostic} diagnostic - Finding.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @returns {boolean} Whether the file has `sql.raw` calls and none takes a value built at run time.
+ */
+function usesOnlyConstantRawSql(diagnostic, readSource) {
+  const source = readSource(diagnostic.filePath);
+  if (source === undefined) {
+    return false;
+  }
+  const argumentsOfRawSql = [...source.matchAll(RAW_SQL_CALL_PATTERN)].map((match) =>
+    (match.groups?.argument ?? "").trim(),
+  );
+  return (
+    argumentsOfRawSql.length > 0 &&
+    argumentsOfRawSql.every((argument) => CONSTANT_SQL_ARGUMENT_PATTERNS.some((pattern) => pattern.test(argument)))
+  );
+}
+
+/**
  * @typedef {object} ReactDoctorDiagnostic
  * @property {string} filePath - File, relative to the project.
  * @property {string} plugin - Plugin that owns the rule (`react-doctor`, `eslint`, `react-hooks-js`...).
@@ -118,9 +213,10 @@ const NON_REACT_FILE_PATTERN = /\.(?:html?|ya?ml)$/u;
 /**
  * Checks whether golfo-lint reports a react-doctor finding.
  * @param {ReactDoctorDiagnostic} diagnostic - Finding.
+ * @param {SourceReader} [readSource] - Reads files of the project, to drop findings the code shows are wrong.
  * @returns {boolean} Whether it is a React finding no other golfo-lint rule reports.
  */
-export function isReportedDiagnostic(diagnostic) {
+export function isReportedDiagnostic(diagnostic, readSource = () => undefined) {
   if (DUPLICATED_PLUGINS.has(diagnostic.plugin) || NON_REACT_FILE_PATTERN.test(diagnostic.filePath)) {
     return false;
   }
@@ -129,6 +225,12 @@ export function isReportedDiagnostic(diagnostic) {
     diagnostic.message.includes(INVALID_BUTTON_TYPE_MESSAGE) &&
     TYPED_JSX_FILE_PATTERN.test(diagnostic.filePath)
   ) {
+    return false;
+  }
+  if (diagnostic.rule === FETCH_STATUS_RULE && checksFetchStatusLater(diagnostic, readSource)) {
+    return false;
+  }
+  if (diagnostic.rule === RAW_SQL_RULE && usesOnlyConstantRawSql(diagnostic, readSource)) {
     return false;
   }
   return !EXCLUDED_REACT_DOCTOR_RULES.has(diagnostic.rule);
