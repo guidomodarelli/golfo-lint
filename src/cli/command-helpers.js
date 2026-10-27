@@ -30,12 +30,25 @@ import { DEFAULT_ANALYZED_PATH, EXIT_CODE_TOOL_UNAVAILABLE } from "./constants.j
 const PACKAGE_MANIFEST_FILE = "package.json";
 
 /**
- * Paths to analyze: the given arguments, or the current directory when there are none.
+ * Adds the default inputs when the arguments only carry options: `golfo-lint styles --fix` still analyzes the
+ * project instead of waiting for standard input.
  * @param {string[]} toolArguments - Arguments given after the subcommand.
- * @returns {string[]} Arguments that end with at least one path.
+ * @param {string[]} defaultInputs - Files, folders or globs to analyze when the arguments name none.
+ * @returns {string[]} The arguments, followed by the default inputs when they had only options.
+ */
+export function withDefaultInputs(toolArguments, defaultInputs) {
+  return toolArguments.some((argument) => !argument.startsWith("-"))
+    ? toolArguments
+    : [...toolArguments, ...defaultInputs];
+}
+
+/**
+ * Paths to analyze: the given arguments, plus the current directory when they name none.
+ * @param {string[]} toolArguments - Arguments given after the subcommand.
+ * @returns {string[]} Arguments that include at least one path.
  */
 export function withDefaultPath(toolArguments) {
-  return toolArguments.length > 0 ? toolArguments : [DEFAULT_ANALYZED_PATH];
+  return withDefaultInputs(toolArguments, [DEFAULT_ANALYZED_PATH]);
 }
 
 /**
@@ -89,9 +102,10 @@ export function dependsOnReact(cwd) {
 /**
  * Runs an executable that a dependency of `@golfo/lint` ships, with the same Node.js that runs `golfo-lint`.
  * @param {CommandContext} context - Where and how to run it.
- * @param {{ packageName: string; binName: string; arguments: string[]; installedByProject?: boolean; installHint?: string }} tool
- *   What to run. `installedByProject` searches the project first, for optional tools the project installs; `installHint`
- *   says how to install the package when it is missing.
+ * @param {{ packageName: string; binName: string; arguments: string[]; nodeArguments?: string[]; installedByProject?: boolean; installHint?: string }} tool
+ *   What to run. `nodeArguments` go to Node.js before the executable (for example `--import` of a hook);
+ *   `installedByProject` searches the project first, for optional tools the project installs; `installHint` says how to
+ *   install the package when it is missing.
  * @returns {Promise<number>} Exit code of the tool.
  */
 export async function runPackageBin(context, tool) {
@@ -102,7 +116,11 @@ export async function runPackageBin(context, tool) {
     context.warn(`golfo-lint: ${tool.packageName} no está instalado. ${tool.installHint ?? "Reinstalá @golfo/lint."}`);
     return EXIT_CODE_TOOL_UNAVAILABLE;
   }
-  return context.runTool({ command: process.execPath, arguments: [binPath, ...tool.arguments], cwd: context.cwd });
+  return context.runTool({
+    command: process.execPath,
+    arguments: [...(tool.nodeArguments ?? []), binPath, ...tool.arguments],
+    cwd: context.cwd,
+  });
 }
 
 /**

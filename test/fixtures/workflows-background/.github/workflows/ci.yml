@@ -1,0 +1,19 @@
+name: CI
+on: push
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start server
+        id: server
+        run: npm start
+        background: true
+      - parallel:
+          - name: Lint
+            run: npm run lint
+          - name: Test
+            run: npm test
+      - name: Wait for the server
+        wait: server

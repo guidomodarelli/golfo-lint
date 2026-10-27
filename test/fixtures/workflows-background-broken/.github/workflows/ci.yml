@@ -1,0 +1,13 @@
+name: CI
+on: push
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - name: Lint
+            run: echo "${{ unknown.value }}"
+          - name: Test
+            run: npm test

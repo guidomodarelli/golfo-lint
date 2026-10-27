@@ -1,7 +1,7 @@
 {
   "name": "@golfo/lint",
   "version": "0.1.0",
-  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, lizard, dependency-cruiser, react-doctor, react-scan (solo en desarrollo), publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
+  "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, dependency-cruiser, react-doctor, react-scan (solo en desarrollo), publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
   "type": "module",
   "license": "MIT",
   "author": "Guido Modarelli",
@@ -20,7 +20,6 @@
     "gitleaks",
     "jscpd",
     "knip",
-    "lizard",
     "publint",
     "react-doctor",
     "react-scan",
@@ -42,10 +41,6 @@
     "./knip": {
       "types": "./src/knip/index.d.ts",
       "default": "./src/knip/index.js"
-    },
-    "./lizard": {
-      "types": "./src/lizard/index.d.ts",
-      "default": "./src/lizard/index.js"
     },
     "./stylelint": {
       "types": "./src/stylelint/index.d.ts",
@@ -69,12 +64,12 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.15"
   },
   "scripts": {
     "lint": "eslint .",
     "test": "node --test \"test/**/*.test.js\"",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "pack:check": "npm pack --dry-run",
     "check:packed-install": "node scripts/check-packed-install.mjs",
     "ci": "npm run lint && npm run typecheck && npm test && npm run pack:check",

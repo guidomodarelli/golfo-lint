@@ -39,3 +39,6 @@ export const STYLISTIC_SUGGESTION_RULES: string[];
 
 /** Rules that report a problem another enabled rule already reports; the preset turns them off. */
 export const DUPLICATED_RULES: string[];
+
+/** Rules that report valid code (security hotspots, correct patterns they forbid); the preset turns them off. */
+export const NON_DEFECT_RULES: string[];

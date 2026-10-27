@@ -85,6 +85,14 @@ describe("createEslintConfig", () => {
     assert.deepEqual(ruleIds, []);
   });
 
+  it("sin tipos, pide la función de comparación en todo sort, porque no distingue números de strings", async () => {
+    const ruleIds = await lintSnippet("export const sortNumbers = (numbers) => numbers.toSorted();\n");
+    assert.deepEqual(ruleIds, ["unicorn/require-array-sort-compare"]);
+    const typedRules = new Set((await listEnabledRules({}, "formatted-badly.ts")).map(({ ruleName }) => ruleName));
+    assert.ok(typedRules.has("@typescript-eslint/require-array-sort-compare"));
+    assert.ok(!typedRules.has("unicorn/require-array-sort-compare"));
+  });
+
   it("no reporta código correcto aunque esté mal formateado", async () => {
     const [result] = await createLinter({}).lintFiles(["formatted-badly.ts"]);
     assert.deepEqual(result.messages, []);
@@ -108,13 +116,38 @@ describe("createEslintConfig", () => {
     assert.ok(ruleIds.includes("unicorn/catch-error-name"));
   });
 
-  it("reporta números mágicos y funciones demasiado complejas", async () => {
-    const branches = Array.from({ length: 11 }, (_, index) => `  if (value === "${String(index)}") { return; }`);
+  it("reporta números mágicos y funciones demasiado complejas, una sola vez", async () => {
+    const branches = Array.from({ length: 16 }, (_, index) => `  if (value === "${String(index)}") { return; }`);
     const ruleIds = await lintSnippet(
       ["export function check(value) {", ...branches, "}", "export const toMilliseconds = (seconds) => seconds * 1000;"].join("\n"),
     );
-    assert.ok(ruleIds.includes("complexity"));
+    assert.ok(ruleIds.includes("sonarjs/cognitive-complexity"));
+    assert.ok(!ruleIds.includes("complexity"));
     assert.ok(ruleIds.includes("@typescript-eslint/no-magic-numbers"));
+  });
+
+  it("no reporta condiciones que dependen de narrowing que TypeScript no puede sostener", async () => {
+    const [result] = await createLinter({}).lintFiles(["unnecessary-conditions.ts"]);
+    const reportedLines = result.messages
+      .filter((message) => message.ruleId === "golfo-lint/no-unnecessary-condition")
+      .map((message) => message.line);
+    const realCheckLine = 33;
+    assert.deepEqual(reportedLines, [realCheckLine]);
+    assert.ok(!result.messages.some((message) => message.ruleId === "@typescript-eslint/no-unnecessary-condition"));
+  });
+
+  it("con --fix, deja imports que compilan cuando mezclan valores y tipos", async () => {
+    const linter = new ESLint({
+      cwd: TYPED_FIXTURE_DIRECTORY,
+      fix: true,
+      overrideConfigFile: true,
+      overrideConfig: createEslintConfig({ tsconfigRootDir: TYPED_FIXTURE_DIRECTORY, testFiles: [] }),
+    });
+    const [result] = await linter.lintFiles(["mixed-imports.ts"]);
+    const output = result.output ?? "";
+    assert.match(output, /^import type \{ Shape as Figure, answer as size \} from/mu);
+    assert.match(output, /^import \{ answer, type Shape \} from/mu);
+    assert.doesNotMatch(output, /import type \{[^}]*\btype /u);
   });
 
   it("con tipos, reporta promesas que nadie espera", async () => {
