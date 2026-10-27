@@ -71,14 +71,29 @@ describe("isReportedDiagnostic", () => {
     assert.equal(isReportedDiagnostic(fetchFinding), true);
   });
 
-  it("descarta sql.raw solo cuando todas sus llamadas del archivo reciben constantes", () => {
-    const finding = diagnostic({ rule: "raw-sql-injection-risk", filePath: "src/repository.ts", line: 1 });
-    const constants = 'await db.execute(sql.raw(EFFECT_SQL.begin));\nawait db.execute(sql.raw("rollback"));\n';
-    assert.equal(isReportedDiagnostic(finding, () => constants), false);
-    const dynamic = `${constants}const column = sql.raw(\`payload ->> '\${key}'\`);\n`;
-    assert.equal(isReportedDiagnostic(finding, () => dynamic), true);
-    const nested = `${constants}await db.execute(sql.raw(String(input)));\n`;
-    assert.equal(isReportedDiagnostic(finding, () => nested), true);
+  it("descarta sql.raw solo cuando todas sus llamadas del archivo reciben SQL fijo en el código", () => {
+    /** @type {Record<string, string>} */
+    const files = {
+      "src/constants/effect-sql.ts": 'export const EFFECT_SQL = { begin: "savepoint effect", release: "release savepoint effect" } as const;\n',
+      "src/repository.ts": [
+        'import { EFFECT_SQL as SQL } from "@/src/constants/effect-sql";',
+        'const ROLLBACK = "rollback to savepoint effect";',
+        "await db.execute(sql.raw(SQL.begin));",
+        "await db.execute(sql.raw(ROLLBACK));",
+        'await db.execute(sql.raw("release savepoint effect"));',
+        "",
+      ].join("\n"),
+    };
+    /** @param {Record<string, string>} sources - Files of the project. */
+    const reader = (sources) => (/** @type {string} */ filePath) => sources[filePath];
+    const finding = diagnostic({ rule: "raw-sql-injection-risk", filePath: "src/repository.ts", line: 3 });
+    assert.equal(isReportedDiagnostic(finding, reader(files)), false);
+    const withCall = { ...files, "src/repository.ts": `${files["src/repository.ts"]}await db.execute(sql.raw(String(input)));\n` };
+    assert.equal(isReportedDiagnostic(finding, reader(withCall)), true);
+    const fromRequest = { ...files, "src/repository.ts": "const SQL = request.query.sql;\nawait db.execute(sql.raw(SQL));\n" };
+    assert.equal(isReportedDiagnostic(finding, reader(fromRequest)), true);
+    const interpolated = { ...files, "src/repository.ts": `await db.execute(sql.raw(\`payload ->> '\${key}'\`));\n` };
+    assert.equal(isReportedDiagnostic(finding, reader(interpolated)), true);
   });
 
   it("descarta páginas HTML y workflows, que no son código de React", () => {

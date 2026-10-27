@@ -231,10 +231,40 @@ function rewriteStepKey(lines, index, { indent, dash, key, rest }, keysOfStep) {
     return;
   }
   lines[index] = `${indent}${dash}run: "true"`;
-  // A `wait` list on the following lines (`- build`) would now hang from `run`: comment it out.
-  for (const nested of listNestedLineIndexes(lines, index, indent.length + dash.length)) {
+  // A `wait` list on the following lines (`- build`) would now hang from `run`: comment it out, also when its items
+  // sit at the column of the key, which YAML allows.
+  const keyColumn = indent.length + dash.length;
+  for (const nested of [...listNestedLineIndexes(lines, index, keyColumn), ...listIndentlessItems(lines, index, keyColumn)]) {
     lines[nested] = `${" ".repeat(indentationOf(lines[nested]))}# ${lines[nested].trimStart()}`;
   }
+}
+
+/**
+ * Lists the items of a sequence that sits at the column of the key it belongs to (`wait:` and then `- server` right
+ * below the `w`), which YAML allows.
+ * @param {string[]} lines - Workflow lines.
+ * @param {number} keyIndex - Index of the line with the key.
+ * @param {number} keyColumn - Column of the key.
+ * @returns {number[]} Indexes of the items and their nested lines.
+ */
+function listIndentlessItems(lines, keyIndex, keyColumn) {
+  /** @type {number[]} */
+  const items = [];
+  let index = keyIndex + 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (isBlankOrComment(line) || indentationOf(line) > keyColumn) {
+      index += 1;
+      continue;
+    }
+    if (indentationOf(line) !== keyColumn || !line.trimStart().startsWith("- ")) {
+      break;
+    }
+    const nested = listNestedLineIndexes(lines, index, keyColumn);
+    items.push(index, ...nested);
+    index += 1 + nested.length;
+  }
+  return items.filter((itemIndex) => !isBlankOrComment(lines[itemIndex]));
 }
 
 /**

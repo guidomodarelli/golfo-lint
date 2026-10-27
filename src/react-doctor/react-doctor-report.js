@@ -4,6 +4,7 @@
  * already reports; it scans HTML pages and workflows that are not React code; and some of its rules only give
  * advice that breaks valid code when applied blindly. golfo-lint keeps one finding per problem, so it drops them.
  */
+import { usesOnlyConstantRawSql } from "./constant-sql.js";
 
 /** react-doctor plugins whose rules the ESLint preset or another golfo-lint analysis already runs. */
 const DUPLICATED_PLUGINS = new Set([
@@ -114,26 +115,11 @@ const FETCH_ASSIGNMENT = " = await fetch(";
 const IDENTIFIER_CHARACTER_PATTERN = /[\w$]/u;
 
 /**
- * `raw-sql-injection-risk` reports one `sql.raw(...)` per file, also when its argument is a string literal or a
- * constant (`sql.raw(EFFECT_SQL.begin)`), which cannot carry user input. The finding is dropped only when every
- * `sql.raw(...)` of the file has such an argument.
+ * `raw-sql-injection-risk` reports one `sql.raw(...)` per file, also when its argument is SQL fixed in the code
+ * (`sql.raw("begin")`, `sql.raw(EFFECT_SQL.begin)` with `const EFFECT_SQL = { begin: "savepoint x" }`), which
+ * cannot carry user input. The finding is dropped only when every `sql.raw(...)` of the file has such an argument.
  */
 const RAW_SQL_RULE = "raw-sql-injection-risk";
-
-/** `sql.raw(` and its argument up to the closing parenthesis, when the argument has no parentheses. */
-const RAW_SQL_CALL_PATTERN = /\bsql\.raw\((?<argument>[^()]*)\)/gu;
-
-/** Every `sql.raw(`, also the ones whose argument has calls or parentheses (`sql.raw(String(input))`). */
-const RAW_SQL_OPENING_PATTERN = /\bsql\.raw\(/gu;
-
-/** Arguments of `sql.raw` that cannot carry user input: string literals without interpolation and constants. */
-const CONSTANT_SQL_ARGUMENT_PATTERNS = [
-  /^"[^"]*"$/u,
-  /^'[^']*'$/u,
-  /^`[^$`]*`$/u,
-  // `EFFECT_SQL` or `EFFECT_SQL.begin`.
-  /^[A-Z][\dA-Z_]*(?:\.[\w$]+)*$/u,
-];
 
 /**
  * Reads a file of the project.
@@ -176,29 +162,6 @@ function checksFetchStatusLater(diagnostic, readSource) {
 }
 
 /**
- * Checks whether every `sql.raw(...)` of a file takes a literal or a constant.
- * @param {ReactDoctorDiagnostic} diagnostic - Finding.
- * @param {SourceReader} readSource - Reads files of the project.
- * @returns {boolean} Whether the file has `sql.raw` calls and none takes a value built at run time.
- */
-function usesOnlyConstantRawSql(diagnostic, readSource) {
-  const source = readSource(diagnostic.filePath);
-  if (source === undefined) {
-    return false;
-  }
-  const argumentsOfRawSql = [...source.matchAll(RAW_SQL_CALL_PATTERN)].map((match) =>
-    (match.groups?.argument ?? "").trim(),
-  );
-  // A call the pattern could not read, such as `sql.raw(String(input))`, counts as built at run time.
-  const rawSqlCallCount = [...source.matchAll(RAW_SQL_OPENING_PATTERN)].length;
-  return (
-    argumentsOfRawSql.length > 0 &&
-    argumentsOfRawSql.length === rawSqlCallCount &&
-    argumentsOfRawSql.every((argument) => CONSTANT_SQL_ARGUMENT_PATTERNS.some((pattern) => pattern.test(argument)))
-  );
-}
-
-/**
  * @typedef {object} ReactDoctorDiagnostic
  * @property {string} filePath - File, relative to the project.
  * @property {string} plugin - Plugin that owns the rule (`react-doctor`, `eslint`, `react-hooks-js`...).
@@ -236,7 +199,7 @@ export function isReportedDiagnostic(diagnostic, readSource = () => undefined) {
   if (diagnostic.rule === FETCH_STATUS_RULE && checksFetchStatusLater(diagnostic, readSource)) {
     return false;
   }
-  if (diagnostic.rule === RAW_SQL_RULE && usesOnlyConstantRawSql(diagnostic, readSource)) {
+  if (diagnostic.rule === RAW_SQL_RULE && usesOnlyConstantRawSql(diagnostic.filePath, readSource)) {
     return false;
   }
   return !EXCLUDED_REACT_DOCTOR_RULES.has(diagnostic.rule);

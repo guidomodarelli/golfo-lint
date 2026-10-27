@@ -71,6 +71,15 @@ describe("rewriteBackgroundSteps", () => {
     assert.equal(lines[7], "      CI: true");
   });
 
+  it("comenta la lista de wait aunque sus elementos estén en la columna de la clave", () => {
+    const workflow = "jobs:\n  build:\n    steps:\n      - name: Wait\n        wait:\n        - server\n        - worker\n        timeout-minutes: 5\n";
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[4], '        run: "true"');
+    assert.equal(lines[5], "        # - server");
+    assert.equal(lines[6], "        # - worker");
+    assert.equal(lines[7], "        timeout-minutes: 5");
+  });
+
   it("reconoce steps: y parallel: con un comentario al final", () => {
     const workflow = "jobs:\n  build:\n    steps: # services\n      - run: npm start\n        background: true\n      - parallel: # checks\n          - run: npm test\n";
     assert.equal(usesBackgroundSteps(workflow), true);
