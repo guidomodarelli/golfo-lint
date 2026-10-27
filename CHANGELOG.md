@@ -32,6 +32,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Fixed
 
+- `golfo-lint styles --fix` (y cualquier análisis que reciba solo opciones) sigue analizando los archivos del proyecto; antes Stylelint esperaba el código por la entrada estándar y fallaba con «Empty source».
 - ESLint ya no se cae con "Fix objects must not be overlapped" cuando `toHaveBeenCalledOnce()` y `toHaveBeenCalledWith()` están en la misma línea de un test.
 - `golfo-lint architecture` analiza los archivos TypeScript de proyectos que usan TypeScript 7: dependency-cruiser no lo soporta y los salteaba en silencio, así que el chequeo pasaba sin analizar nada. Ahora usa el TypeScript 6 de `@golfo/lint`.
 - `golfo-lint secrets` no reporta los hashes de contenido que golfo-kit guarda en `.golfo/skill-coverage/`.

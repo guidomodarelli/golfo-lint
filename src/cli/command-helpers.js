@@ -30,12 +30,25 @@ import { DEFAULT_ANALYZED_PATH, EXIT_CODE_TOOL_UNAVAILABLE } from "./constants.j
 const PACKAGE_MANIFEST_FILE = "package.json";
 
 /**
- * Paths to analyze: the given arguments, or the current directory when there are none.
+ * Adds the default inputs when the arguments only carry options: `golfo-lint styles --fix` still analyzes the
+ * project instead of waiting for standard input.
  * @param {string[]} toolArguments - Arguments given after the subcommand.
- * @returns {string[]} Arguments that end with at least one path.
+ * @param {string[]} defaultInputs - Files, folders or globs to analyze when the arguments name none.
+ * @returns {string[]} The arguments, followed by the default inputs when they had only options.
+ */
+export function withDefaultInputs(toolArguments, defaultInputs) {
+  return toolArguments.some((argument) => !argument.startsWith("-"))
+    ? toolArguments
+    : [...toolArguments, ...defaultInputs];
+}
+
+/**
+ * Paths to analyze: the given arguments, plus the current directory when they name none.
+ * @param {string[]} toolArguments - Arguments given after the subcommand.
+ * @returns {string[]} Arguments that include at least one path.
  */
 export function withDefaultPath(toolArguments) {
-  return toolArguments.length > 0 ? toolArguments : [DEFAULT_ANALYZED_PATH];
+  return withDefaultInputs(toolArguments, [DEFAULT_ANALYZED_PATH]);
 }
 
 /**

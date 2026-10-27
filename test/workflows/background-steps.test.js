@@ -71,6 +71,32 @@ describe("rewriteBackgroundSteps", () => {
     assert.equal(lines[7], "      CI: true");
   });
 
+  it("reconoce steps: y parallel: con un comentario al final", () => {
+    const workflow = "jobs:\n  build:\n    steps: # services\n      - run: npm start\n        background: true\n      - parallel: # checks\n          - run: npm test\n";
+    assert.equal(usesBackgroundSteps(workflow), true);
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[4], "        # background: true");
+    assert.equal(lines[6], "      - run: npm test");
+  });
+
+  it("no toma como pasos el texto de un script run: |, aunque escriba YAML", () => {
+    const workflow = [
+      "jobs:",
+      "  build:",
+      "    steps:",
+      "      - run: |",
+      "          cat > ci.yml <<'EOF'",
+      "          steps:",
+      "            - wait: server",
+      "          EOF",
+      "        background: true",
+      "",
+    ].join("\n");
+    const lines = rewriteBackgroundSteps(workflow).text.split("\n");
+    assert.equal(lines[6], "            - wait: server");
+    assert.equal(lines[8], "        # background: true");
+  });
+
   it("no confunde con pasos las entradas de otras listas, como las de una matriz", () => {
     const workflow = [
       "jobs:",

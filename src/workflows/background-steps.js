@@ -50,6 +50,19 @@ function isBlankOrComment(line) {
 /** Key that opens the list of steps of a job. */
 const STEPS_KEY = "steps";
 
+/** Value that opens a block scalar (`run: |`, `script: >-`), whose lines are text, not keys. */
+const BLOCK_SCALAR_PATTERN = /^\s*[>|][+-]?\d?\s*(?:#.*)?$/u;
+
+/**
+ * Checks whether the rest of a `key:` line opens a block: nothing, or only a comment (`steps: # services`).
+ * @param {string} rest - What follows the colon.
+ * @returns {boolean} Whether the key has no value on its line.
+ */
+function opensBlock(rest) {
+  const value = rest.trim();
+  return value === "" || value.startsWith("#");
+}
+
 /**
  * @typedef {object} StepKeyLine
  * @property {number} index - Index of the line.
@@ -69,11 +82,20 @@ function listStepKeyLines(lines) {
   let stepsIndent = -1;
   let stepKeyIndent = -1;
   let stepIndex = -1;
+  let blockScalarIndent = -1;
   lines.forEach((line, index) => {
     if (isBlankOrComment(line)) {
       return;
     }
+    // The lines of a block scalar (a `run: |` script, maybe with a heredoc that writes YAML) are text.
+    if (blockScalarIndent !== -1 && indentationOf(line) > blockScalarIndent) {
+      return;
+    }
+    blockScalarIndent = -1;
     const groups = STEP_KEY_PATTERN.exec(line)?.groups;
+    if (groups !== undefined && BLOCK_SCALAR_PATTERN.test(groups.rest)) {
+      blockScalarIndent = groups.indent.length + (groups.dash ?? "").length;
+    }
     // YAML lets the `-` of the steps sit at the same column as `steps:`; only a key there ends the list.
     const continuesIndentlessList = groups?.dash !== undefined && indentationOf(line) === stepsIndent;
     if (stepsIndent !== -1 && indentationOf(line) <= stepsIndent && !continuesIndentlessList) {
@@ -83,7 +105,7 @@ function listStepKeyLines(lines) {
     if (groups === undefined) {
       return;
     }
-    if (groups.key === STEPS_KEY && groups.dash === undefined && groups.rest.trim() === "") {
+    if (groups.key === STEPS_KEY && groups.dash === undefined && opensBlock(groups.rest)) {
       stepsIndent = groups.indent.length;
       stepKeyIndent = -1;
       return;
@@ -132,7 +154,7 @@ export function usesBackgroundSteps(text) {
  */
 function flattenParallelGroups(lines, columnShifts) {
   for (const { index, parts } of listStepKeyLines(lines)) {
-    if (parts.key !== PARALLEL_KEY || parts.dash === "" || parts.rest.trim() !== "") {
+    if (parts.key !== PARALLEL_KEY || parts.dash === "" || !opensBlock(parts.rest)) {
       continue;
     }
     const itemIndent = parts.indent.length;

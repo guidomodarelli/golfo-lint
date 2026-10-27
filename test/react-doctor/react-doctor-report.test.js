@@ -77,6 +77,8 @@ describe("isReportedDiagnostic", () => {
     assert.equal(isReportedDiagnostic(finding, () => constants), false);
     const dynamic = `${constants}const column = sql.raw(\`payload ->> '\${key}'\`);\n`;
     assert.equal(isReportedDiagnostic(finding, () => dynamic), true);
+    const nested = `${constants}await db.execute(sql.raw(String(input)));\n`;
+    assert.equal(isReportedDiagnostic(finding, () => nested), true);
   });
 
   it("descarta páginas HTML y workflows, que no son código de React", () => {

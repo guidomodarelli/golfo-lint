@@ -198,6 +198,16 @@ describe("golfo-lint styles", () => {
     assert.equal(exitCode, EXIT_CODE_SUCCESS);
   });
 
+  it("con solo opciones, como --quiet, sigue analizando los estilos del proyecto", async () => {
+    const exitCode = await runCli(["styles", "--quiet"], {
+      cwd: fixturePath("styles-valid"),
+      log: () => {},
+      warn: () => {},
+      runTool: (invocation) => spawnTool({ ...invocation, stdio: "ignore" }),
+    });
+    assert.equal(exitCode, EXIT_CODE_SUCCESS);
+  });
+
   it("pasa cuando no hay archivos de estilos", async () => {
     const { exitCode } = await runSilently("styles", fixturePath("cycle"));
     assert.equal(exitCode, EXIT_CODE_SUCCESS);

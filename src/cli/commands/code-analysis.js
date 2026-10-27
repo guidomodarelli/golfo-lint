@@ -12,6 +12,7 @@ import {
   hasAnyPath,
   readProjectManifest,
   runPackageBin,
+  withDefaultInputs,
   withDefaultPath,
 } from "../command-helpers.js";
 import { formatDiagnostics, isReportedDiagnostic } from "../../react-doctor/react-doctor-report.js";
@@ -115,7 +116,7 @@ export const stylesCommand = {
     const configArguments = hasAnyPath(context.cwd, STYLELINT_PROJECT_CONFIG_FILES)
       ? []
       : ["--config", sharedConfigPath("stylelint/default.config.js")];
-    const inputs = context.toolArguments.length > 0 ? context.toolArguments : [DEFAULT_STYLE_GLOB];
+    const inputs = withDefaultInputs(context.toolArguments, [DEFAULT_STYLE_GLOB]);
     return runPackageBin(context, {
       packageName: "stylelint",
       binName: "stylelint",
@@ -130,10 +131,10 @@ export const architectureCommand = {
   skipReason: (cwd) => (hasAnyPath(cwd, SOURCE_FOLDERS) ? undefined : `no hay ${SOURCE_FOLDERS.join(", ")}`),
   run(context) {
     const projectConfig = DEPENDENCY_CRUISER_PROJECT_CONFIG_FILES.find((fileName) => hasAnyPath(context.cwd, [fileName]));
-    const sources =
-      context.toolArguments.length > 0
-        ? context.toolArguments
-        : SOURCE_FOLDERS.filter((folder) => hasAnyPath(context.cwd, [folder]));
+    const sources = withDefaultInputs(
+      context.toolArguments,
+      SOURCE_FOLDERS.filter((folder) => hasAnyPath(context.cwd, [folder])),
+    );
     return runPackageBin(context, {
       packageName: "dependency-cruiser",
       binName: "depcruise",

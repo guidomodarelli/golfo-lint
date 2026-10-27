@@ -120,8 +120,11 @@ const IDENTIFIER_CHARACTER_PATTERN = /[\w$]/u;
  */
 const RAW_SQL_RULE = "raw-sql-injection-risk";
 
-/** `sql.raw(` and its argument up to the closing parenthesis. */
+/** `sql.raw(` and its argument up to the closing parenthesis, when the argument has no parentheses. */
 const RAW_SQL_CALL_PATTERN = /\bsql\.raw\((?<argument>[^()]*)\)/gu;
+
+/** Every `sql.raw(`, also the ones whose argument has calls or parentheses (`sql.raw(String(input))`). */
+const RAW_SQL_OPENING_PATTERN = /\bsql\.raw\(/gu;
 
 /** Arguments of `sql.raw` that cannot carry user input: string literals without interpolation and constants. */
 const CONSTANT_SQL_ARGUMENT_PATTERNS = [
@@ -186,8 +189,11 @@ function usesOnlyConstantRawSql(diagnostic, readSource) {
   const argumentsOfRawSql = [...source.matchAll(RAW_SQL_CALL_PATTERN)].map((match) =>
     (match.groups?.argument ?? "").trim(),
   );
+  // A call the pattern could not read, such as `sql.raw(String(input))`, counts as built at run time.
+  const rawSqlCallCount = [...source.matchAll(RAW_SQL_OPENING_PATTERN)].length;
   return (
     argumentsOfRawSql.length > 0 &&
+    argumentsOfRawSql.length === rawSqlCallCount &&
     argumentsOfRawSql.every((argument) => CONSTANT_SQL_ARGUMENT_PATTERNS.some((pattern) => pattern.test(argument)))
   );
 }
