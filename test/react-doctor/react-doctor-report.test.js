@@ -45,9 +45,14 @@ describe("isReportedDiagnostic", () => {
     }
   });
 
-  it("descarta type={CONSTANTE} en botones, que TypeScript ya valida", () => {
-    const constantType = diagnostic({ rule: "button-has-type", message: "This button has an invalid `type`, so the browser may treat it like a submit button." });
-    assert.equal(isReportedDiagnostic(constantType), false);
+  it("descarta type={CONSTANTE} en botones de archivos .tsx, que TypeScript ya valida", () => {
+    const message = "This button has an invalid `type`, so the browser may treat it like a submit button.";
+    assert.equal(isReportedDiagnostic(diagnostic({ rule: "button-has-type", message, filePath: "components/form.tsx" })), false);
+  });
+
+  it("mantiene un type inválido en botones de JavaScript, que TypeScript no revisa", () => {
+    const message = "This button has an invalid `type`, so the browser may treat it like a submit button.";
+    assert.equal(isReportedDiagnostic(diagnostic({ rule: "button-has-type", message, filePath: "components/form.jsx" })), true);
   });
 
   it("descarta páginas HTML y workflows, que no son código de React", () => {

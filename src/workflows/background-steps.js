@@ -47,16 +47,76 @@ function isBlankOrComment(line) {
   return trimmed === "" || trimmed.startsWith("#");
 }
 
+/** Key that opens the list of steps of a job. */
+const STEPS_KEY = "steps";
+
+/**
+ * @typedef {object} StepKeyLine
+ * @property {number} index - Index of the line.
+ * @property {{ indent: string; dash: string; key: string; rest: string }} parts - Parts of the line.
+ */
+
+/**
+ * Lists the keys of steps: the keys of the list items under a `steps:` key, also the items of a `parallel:` group.
+ * Keys of other lists, like the entries of `strategy.matrix.include`, are not steps.
+ * @param {string[]} lines - Workflow lines.
+ * @returns {StepKeyLine[]} Step keys, in order.
+ */
+function listStepKeyLines(lines) {
+  /** @type {StepKeyLine[]} */
+  const stepKeys = [];
+  let stepsIndent = -1;
+  let stepKeyIndent = -1;
+  lines.forEach((line, index) => {
+    if (isBlankOrComment(line)) {
+      return;
+    }
+    if (stepsIndent !== -1 && indentationOf(line) <= stepsIndent) {
+      stepsIndent = -1;
+      stepKeyIndent = -1;
+    }
+    const groups = STEP_KEY_PATTERN.exec(line)?.groups;
+    if (groups === undefined) {
+      return;
+    }
+    if (groups.key === STEPS_KEY && groups.dash === undefined && groups.rest.trim() === "") {
+      stepsIndent = groups.indent.length;
+      stepKeyIndent = -1;
+      return;
+    }
+    if (stepsIndent === -1) {
+      return;
+    }
+    const keyIndent = groups.indent.length + (groups.dash ?? "").length;
+    if (groups.dash !== undefined) {
+      stepKeyIndent = keyIndent;
+    }
+    if (keyIndent === stepKeyIndent) {
+      stepKeys.push({
+        index,
+        parts: { indent: groups.indent, dash: groups.dash ?? "", key: groups.key, rest: groups.rest },
+      });
+    }
+  });
+  return stepKeys;
+}
+
+/**
+ * Checks whether a key belongs to background steps.
+ * @param {string} key - Step key.
+ * @returns {boolean} Whether it is `background`, `wait`, `wait-all`, `cancel` or `parallel`.
+ */
+function isBackgroundStepKey(key) {
+  return key === BACKGROUND_KEY || key === PARALLEL_KEY || SYNCHRONIZATION_KEYS.has(key);
+}
+
 /**
  * Checks whether a workflow uses background steps.
  * @param {string} text - Workflow source.
  * @returns {boolean} Whether some step uses `background`, `wait`, `wait-all`, `cancel` or `parallel`.
  */
 export function usesBackgroundSteps(text) {
-  return text.split("\n").some((line) => {
-    const key = STEP_KEY_PATTERN.exec(line)?.groups?.key;
-    return key !== undefined && (key === BACKGROUND_KEY || key === PARALLEL_KEY || SYNCHRONIZATION_KEYS.has(key));
-  });
+  return listStepKeyLines(text.split("\n")).some(({ parts }) => isBackgroundStepKey(parts.key));
 }
 
 /**
@@ -65,13 +125,12 @@ export function usesBackgroundSteps(text) {
  * @param {Map<number, number>} columnShifts - Receives the columns each 1-based line moved.
  */
 function flattenParallelGroups(lines, columnShifts) {
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = STEP_KEY_PATTERN.exec(lines[index]);
-    if (match?.groups?.key !== PARALLEL_KEY || match.groups.dash === undefined || match.groups.rest.trim() !== "") {
+  for (const { index, parts } of listStepKeyLines(lines)) {
+    if (parts.key !== PARALLEL_KEY || parts.dash === "" || parts.rest.trim() !== "") {
       continue;
     }
-    const itemIndent = match.groups.indent.length;
-    lines[index] = `${match.groups.indent}# ${PARALLEL_KEY}:`;
+    const itemIndent = parts.indent.length;
+    lines[index] = `${parts.indent}# ${PARALLEL_KEY}:`;
     const firstNested = lines.findIndex((line, lineIndex) => lineIndex > index && !isBlankOrComment(line));
     const shift = firstNested === -1 ? 0 : indentationOf(lines[firstNested]) - itemIndent;
     for (const nested of listNestedLineIndexes(lines, index, itemIndent)) {
@@ -104,24 +163,8 @@ function listNestedLineIndexes(lines, openingIndex, blockIndent) {
  * @param {string[]} lines - Workflow lines, changed in place.
  */
 function rewriteBackgroundKeys(lines) {
-  let stepKeyIndent = -1;
-  for (let index = 0; index < lines.length; index += 1) {
-    const groups = STEP_KEY_PATTERN.exec(lines[index])?.groups;
-    if (groups === undefined) {
-      continue;
-    }
-    const keyIndent = groups.indent.length + (groups.dash ?? "").length;
-    if (groups.dash !== undefined) {
-      stepKeyIndent = keyIndent;
-    }
-    if (keyIndent === stepKeyIndent) {
-      rewriteStepKey(lines, index, {
-        indent: groups.indent,
-        dash: groups.dash ?? "",
-        key: groups.key,
-        rest: groups.rest,
-      });
-    }
+  for (const { index, parts } of listStepKeyLines(lines)) {
+    rewriteStepKey(lines, index, parts);
   }
 }
 

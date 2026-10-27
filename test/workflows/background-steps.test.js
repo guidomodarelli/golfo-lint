@@ -54,4 +54,21 @@ describe("rewriteBackgroundSteps", () => {
     const workflow = "jobs:\n  build:\n    steps:\n      - uses: actions/example@v1\n        with:\n          wait: 5\n";
     assert.equal(rewriteBackgroundSteps(workflow).text, workflow);
   });
+
+  it("no confunde con pasos las entradas de otras listas, como las de una matriz", () => {
+    const workflow = [
+      "jobs:",
+      "  build:",
+      "    strategy:",
+      "      matrix:",
+      "        include:",
+      "          - background: true",
+      "            name: server",
+      "    steps:",
+      "      - run: npm test",
+      "",
+    ].join("\n");
+    assert.equal(usesBackgroundSteps(workflow), false);
+    assert.equal(rewriteBackgroundSteps(workflow).text, workflow);
+  });
 });

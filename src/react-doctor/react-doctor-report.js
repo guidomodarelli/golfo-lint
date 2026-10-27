@@ -85,10 +85,14 @@ const EXCLUDED_REACT_DOCTOR_RULES = new Set([
 ]);
 
 /**
- * `button-has-type` also reports `type={CONSTANT}` as invalid, because it only reads literals. TypeScript already
- * checks the value of `type`; a button without `type` is still reported.
+ * `button-has-type` also reports `type={CONSTANT}` as invalid, because it only reads literals. In `.tsx` files
+ * TypeScript already checks the value of `type`; in JavaScript an invalid `type` is still reported, and so is a
+ * button without `type`.
  */
 const INVALID_BUTTON_TYPE_MESSAGE = "invalid `type`";
+
+/** Files whose JSX TypeScript checks. */
+const TYPED_JSX_FILE_PATTERN = /\.tsx$/u;
 
 /** Files react-doctor scans that are not React code: inline scripts of HTML pages, workflows. */
 const NON_REACT_FILE_PATTERN = /\.(?:html?|ya?ml)$/u;
@@ -120,7 +124,11 @@ export function isReportedDiagnostic(diagnostic) {
   if (DUPLICATED_PLUGINS.has(diagnostic.plugin) || NON_REACT_FILE_PATTERN.test(diagnostic.filePath)) {
     return false;
   }
-  if (diagnostic.rule === "button-has-type" && diagnostic.message.includes(INVALID_BUTTON_TYPE_MESSAGE)) {
+  if (
+    diagnostic.rule === "button-has-type" &&
+    diagnostic.message.includes(INVALID_BUTTON_TYPE_MESSAGE) &&
+    TYPED_JSX_FILE_PATTERN.test(diagnostic.filePath)
+  ) {
     return false;
   }
   return !EXCLUDED_REACT_DOCTOR_RULES.has(diagnostic.rule);
