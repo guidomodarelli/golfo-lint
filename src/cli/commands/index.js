@@ -39,7 +39,7 @@ const ANALYSIS_COMMANDS = {
  * @returns {Promise<number>} Exit code.
  */
 export async function runApplicableCommand(commandName, command, context) {
-  const skipReason = command.skipReason?.(context.cwd);
+  const skipReason = command.skipReason?.(context.cwd, context.toolArguments);
   if (skipReason !== undefined) {
     context.log(`golfo-lint ${commandName}: no aplica (${skipReason}).`);
     return 0;

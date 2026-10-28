@@ -61,9 +61,17 @@ function findEslintConfig(cwd) {
  * @returns {string[]} `--config` and the file, or nothing when the caller already chose one.
  */
 function configArguments(toolArguments, cwd) {
-  const chosen = toolArguments.some((argument) => CONFIG_FLAGS.has(argument) || argument.startsWith("--config="));
   const configFile = findEslintConfig(cwd);
-  return chosen || configFile === undefined ? [] : ["--config", configFile];
+  return choosesConfig(toolArguments) || configFile === undefined ? [] : ["--config", configFile];
+}
+
+/**
+ * Checks whether the caller picked the config file.
+ * @param {string[]} toolArguments - Arguments the caller passed through.
+ * @returns {boolean} Whether they include `-c`, `--config` or `--config=<file>`.
+ */
+function choosesConfig(toolArguments) {
+  return toolArguments.some((argument) => CONFIG_FLAGS.has(argument) || argument.startsWith("--config="));
 }
 
 /** Severity ESLint's JSON report gives errors. */
@@ -125,7 +133,8 @@ function filterResults(results) {
 /** @type {LintCommand} */
 export const lintCommand = {
   description: "Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js y tests (bun lint).",
-  skipReason: (cwd) => (findEslintConfig(cwd) === undefined ? "el proyecto no tiene eslint.config" : undefined),
+  skipReason: (cwd, toolArguments) =>
+    choosesConfig(toolArguments) || findEslintConfig(cwd) !== undefined ? undefined : "el proyecto no tiene eslint.config",
   async run(context) {
     const reportDirectory = mkdtempSync(path.join(os.tmpdir(), "golfo-lint-bun-lint-"));
     const reportPath = path.join(reportDirectory, "report.json");

@@ -18,11 +18,13 @@ const DISABLE_DIRECTIVE_PATTERN = /^\s*(?:es|ox)lint-(?:disable(?:-next-line|-li
 const INLINE_CONFIG_PATTERN = /^\s*(?:es|ox)lint\s+(?:"[^"]+"|'[^']+'|[@\w/-]+)\s*:/u;
 
 /**
- * Global declarations, which ESLint reads only from block comments: `/* global name *\/` or `/* globals name *\/` makes
- * `no-undef` accept a name that may not exist. ESLint reads any block comment that starts with the word that way, so it
+ * Declarations ESLint reads only from block comments, which silence rules too: `/* global name *\/` and
+ * `/* globals name *\/` make `no-undef` accept a name that may not exist, `/* exported name *\/` makes
+ * `no-unused-vars` accept an unused variable in a script, and `/* eslint-env browser *\/` declares an environment's
+ * globals. ESLint reads any block comment that starts with the word that way, so it
  * counts even when it reads as prose.
  */
-const GLOBAL_DIRECTIVE_PATTERN = /^\s*globals?\s+\S/u;
+const GLOBAL_DIRECTIVE_PATTERN = /^\s*(?:globals?|exported|eslint-env)\s+\S/u;
 
 /**
  * Checks whether a comment is a lint directive rather than prose.

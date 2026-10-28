@@ -20,25 +20,29 @@ after(() => {
 });
 
 /**
- * Creates a project with an ESLint config and a leftover oxlint config, which `bun lint` would prefer.
+ * Creates a project with a leftover oxlint config, which `bun lint` would prefer, and usually an ESLint config.
+ * @param {boolean} [withRootConfig] - Whether it has `eslint.config.js` at its root.
  * @returns {string} Project folder.
  */
-function createProject() {
+function createProject(withRootConfig = true) {
   const folder = mkdtempSync(path.join(tmpdir(), "golfo-lint-lint-"));
   createdFolders.push(folder);
-  writeFileSync(path.join(folder, "eslint.config.js"), "export default [];\n");
+  if (withRootConfig) {
+    writeFileSync(path.join(folder, "eslint.config.js"), "export default [];\n");
+  }
   writeFileSync(path.join(folder, ".oxlintrc.json"), "{}\n");
   return folder;
 }
 
 /**
  * Runs `golfo-lint lint` with a fake `bun lint` that writes a report and exits with a given code.
- * @param {{ exitCode: number; messages: object[]; toolArguments?: string[] }} fake - What the fake reports.
+ * @param {{ exitCode: number; messages: object[]; toolArguments?: string[]; withRootConfig?: boolean }} fake - What the
+ * fake reports and how the project looks.
  * @returns {Promise<{ exitCode: number; arguments: string[]; output: string[] }>} Result, the arguments `bun lint`
  * got and the messages of `golfo-lint`.
  */
-async function runLint({ exitCode, messages, toolArguments = [] }) {
-  const cwd = createProject();
+async function runLint({ exitCode, messages, toolArguments = [], withRootConfig = true }) {
+  const cwd = createProject(withRootConfig);
   /** @type {string[]} */
   let received = [];
   /** @type {string[]} */
@@ -77,6 +81,17 @@ describe("golfo-lint lint", () => {
     });
     assert.equal(received.filter((argument) => argument === "--config").length, 0);
     assert.deepEqual(received.slice(-2), ["-c", "eslint.other.js"]);
+  });
+
+  it("corre con un config fuera de la raíz cuando quien lo llama lo elige", async () => {
+    const { exitCode, arguments: received } = await runLint({
+      exitCode: EXIT_CODE_PROBLEMS_FOUND,
+      messages: [PROBLEM],
+      toolArguments: ["--config", "config/eslint.mjs"],
+      withRootConfig: false,
+    });
+    assert.equal(exitCode, EXIT_CODE_PROBLEMS_FOUND);
+    assert.deepEqual(received.slice(-2), ["--config", "config/eslint.mjs"]);
   });
 
   it("falla cuando bun lint avisa que algunas reglas no corrieron, aunque no haya problemas", async () => {
