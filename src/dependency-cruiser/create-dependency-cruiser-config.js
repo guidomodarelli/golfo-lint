@@ -87,8 +87,8 @@ const BASE_RULES = /** @type {ForbiddenRule[]} */ ([
 ]);
 
 /**
- * Builds the rules that keep hexagonal layers pointing inwards: `domain` depends on nothing else and
- * `application` does not depend on `infrastructure`.
+ * Builds the rules that keep hexagonal layers pointing inwards: `domain` depends on nothing else, `application` does
+ * not depend on `infrastructure`, and no layer imports a `setup.ts`, the composition root that wires them.
  * @param {string} modulesPath - Folder whose subfolders are hexagonal modules.
  * @returns {ForbiddenRule[]} Layer rules.
  */
@@ -102,6 +102,14 @@ function createHexagonalRules(modulesPath) {
       comment: "domain no puede depender de application ni de infrastructure: definí un puerto en domain.",
       from: { path: `${modulePrefix}domain/` },
       to: { path: `${modulePrefix}(application|infrastructure)/` },
+    },
+    {
+      name: "layers-not-to-setup",
+      severity: "error",
+      comment:
+        "Las capas de un módulo no importan su setup.ts ni el de otro: setup.ts es la raíz de composición y es el que arma las capas. Recibí la dependencia por parámetro.",
+      from: { path: `${modulePrefix}(domain|application|infrastructure|presentation)/` },
+      to: { path: `^${escapedModulesPath}/(setup|[^/]+/setup)[.][a-z]+$` },
     },
     {
       name: "application-not-to-infrastructure",

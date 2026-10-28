@@ -30,7 +30,8 @@ import {
   TEST_FILE_GLOBS,
 } from "../shared/thresholds.js";
 import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules } from "./formatting-rules.js";
-import { noUnnecessaryCondition } from "./rules/no-unnecessary-condition.js";
+/** Plugin with the rules golfo-lint writes itself, under the `golfo-lint/` prefix. */
+import GOLFO_LINT_PLUGIN from "./plugin.js";
 
 
 /**
@@ -60,8 +61,6 @@ const TYPESCRIPT_FILE_GLOBS = ["**/*.{ts,tsx,mts,cts}"];
 /** Tool config files, whose job is the top-level side effect of exporting a computed config. */
 const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}"];
 
-/** Plugin with the rules golfo-lint writes itself, under the `golfo-lint/` prefix. */
-const GOLFO_LINT_PLUGIN = { rules: { "no-unnecessary-condition": noUnnecessaryCondition } };
 
 /** Root TypeScript config of a project. */
 const ROOT_TSCONFIG_FILE = "tsconfig.json";
@@ -235,6 +234,8 @@ function createPluginRules() {
         ignoreNumericLiteralTypes: true,
         ignoreReadonlyClassProperties: true,
         ignoreTypeIndexes: true,
+        // A number in a `let` can change on the next line: only a `const` gives it a fixed meaning.
+        enforceConst: true,
       },
     ],
     // Inline `type` specifiers (`import { value, type Shape }`): merging a separate `import type { ... }` into an
@@ -364,14 +365,14 @@ function promoteWarningsToErrors(configs) {
 }
 
 /**
- * Rules about `eslint-disable` and other directive comments.
+ * Rules about `eslint-disable`, `oxlint-disable` and other directive comments.
  * @param {boolean} allowDisableComments - Whether directive comments may silence rules.
  * @returns {FlatConfig} Config object.
  */
 function createDirectiveCommentsConfig(allowDisableComments) {
   return {
     name: "golfo-lint/directive-comments",
-    plugins: { "eslint-comments": eslintComments },
+    plugins: { "eslint-comments": eslintComments, "golfo-lint": GOLFO_LINT_PLUGIN },
     linterOptions: { reportUnusedDisableDirectives: "error", reportUnusedInlineConfigs: "error" },
     rules: allowDisableComments
       ? {
@@ -379,7 +380,8 @@ function createDirectiveCommentsConfig(allowDisableComments) {
           "eslint-comments/require-description": "error",
           "eslint-comments/disable-enable-pair": "error",
         }
-      : { "eslint-comments/no-use": ["error", { allow: [] }] },
+      : // Also the `oxlint-disable` spelling, which oxlint honors as well and `eslint-comments` does not see.
+        { "golfo-lint/no-lint-disable": "error" },
   };
 }
 

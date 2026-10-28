@@ -4,6 +4,7 @@
  * loads the original ESLint plugins as JS plugins for the rest.
  */
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import migrate from "@oxlint/migrate";
 import { createEslintConfig } from "../eslint/create-eslint-config.js";
 
@@ -84,11 +85,14 @@ const OXLINT_PREFIXES = new Map([
  */
 const NON_SERIALIZABLE_SETTINGS = ["import-x/resolver-next"];
 
-/**
- * Prefix of the preset's own plugin. Its only rule, `golfo-lint/no-unnecessary-condition`, needs type information,
- * which oxlint does not give to JS plugins, so it stays out of the oxlint config.
- */
-const GOLFO_LINT_PREFIX = "golfo-lint";
+/** Name `@oxlint/migrate` gives the preset's own plugin, which oxlint loads from `src/eslint/plugin.js`. */
+const GOLFO_LINT_PLUGIN_NAME = "eslint-plugin-golfo-lint";
+
+/** Module of the preset's own plugin. */
+const GOLFO_LINT_PLUGIN_PATH = fileURLToPath(new URL("../eslint/plugin.js", import.meta.url));
+
+/** The preset's own rules that need type information, which oxlint does not give to JS plugins. */
+const TYPE_AWARE_GOLFO_LINT_RULES = new Set(["golfo-lint/no-unnecessary-condition"]);
 
 /**
  * Splits a rule name into plugin prefix and rule.
@@ -229,7 +233,7 @@ function collectAliasedRules(eslintConfig, notImplemented) {
  * Turns the JS plugin names `@oxlint/migrate` writes into entries oxlint can load from any project: the package is
  * resolved from `@golfo/lint`, which depends on it, and the entry keeps the rule prefix as its name.
  * @param {JsPluginEntry[] | undefined} jsPlugins - JS plugins of a config or override.
- * @returns {JsPluginEntry[] | undefined} Resolved entries, without the preset's own plugin.
+ * @returns {JsPluginEntry[] | undefined} Resolved entries.
  * @throws {Error} When the migration names a plugin this module does not know.
  */
 function resolveJsPlugins(jsPlugins) {
@@ -238,8 +242,8 @@ function resolveJsPlugins(jsPlugins) {
   }
   return jsPlugins.flatMap((entry) => {
     const pluginName = typeof entry === "string" ? entry : entry.specifier;
-    if (pluginName === `eslint-plugin-${GOLFO_LINT_PREFIX}`) {
-      return [];
+    if (pluginName === GOLFO_LINT_PLUGIN_NAME) {
+      return [{ name: "golfo-lint", specifier: GOLFO_LINT_PLUGIN_PATH }];
     }
     const packageName = PLUGIN_PACKAGES.get(pluginName);
     if (packageName === undefined) {
@@ -250,7 +254,7 @@ function resolveJsPlugins(jsPlugins) {
 }
 
 /**
- * Removes the preset's own rules, which need type information that oxlint does not give to JS plugins.
+ * Removes the preset's own rules that need type information, which oxlint does not give to JS plugins.
  * @param {Record<string, unknown> | undefined} rules - Rules of a config or override.
  * @returns {Record<string, unknown> | undefined} The rules without them.
  */
@@ -259,7 +263,7 @@ function dropGolfoLintRules(rules) {
     return undefined;
   }
   return Object.fromEntries(
-    Object.entries(rules).filter(([ruleName]) => splitRuleName(ruleName).prefix !== GOLFO_LINT_PREFIX),
+    Object.entries(rules).filter(([ruleName]) => !TYPE_AWARE_GOLFO_LINT_RULES.has(ruleName)),
   );
 }
 

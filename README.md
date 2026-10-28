@@ -104,7 +104,7 @@ Qué incluye:
 - **unicorn** `unopinionated`, más `catch-error-name` (el error del `catch` se llama `error`) y `name-replacements` con una lista propia que solo expande abreviaturas (`err`, `msg`, `btn`, `ctx`...). Los reemplazos de unicorn quedan apagados porque también abrevian (`application` por `app`).
 - **import-x**: imports duplicados, exports mutables, auto-imports y rutas inútiles. Las reglas que repiten lo que TypeScript ya verifica (`named`, `default`, `namespace`, `no-unresolved`) quedan apagadas, y los ciclos los revisa `golfo-lint architecture` para todo el repositorio, mucho más rápido.
 - **promise** y **regexp** `recommended`.
-- **eslint-comments**: prohíbe los comentarios que apagan reglas.
+- **`golfo-lint/no-lint-disable`**: prohíbe los comentarios que apagan o reconfiguran reglas, tanto `eslint-disable` como `oxlint-disable`, que oxlint también respeta. Con `allowDisableComments`, **eslint-comments** exige que expliquen por qué.
 - Con `react`: **react-hooks**, **jsx-a11y** (el fork `eslint-plugin-jsx-a11y-x`, porque el original todavía no soporta ESLint 10) y **react-you-might-not-need-an-effect**.
 - Con `next`: **@next/eslint-plugin-next** `core-web-vitals`.
 - Con `vitest`: **@vitest/eslint-plugin** `recommended`, más `no-standalone-expect`, `require-to-throw-message` y `valid-title`.
@@ -172,7 +172,7 @@ export default createDependencyCruiserConfig({
 });
 ```
 
-Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no puede depender de `application` ni de `infrastructure`, y `application` no puede depender de `infrastructure`.
+Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no puede depender de `application` ni de `infrastructure`, `application` no puede depender de `infrastructure`, y ninguna capa importa un `setup.ts` (el del módulo o el general de la carpeta), que es la raíz de composición que arma las capas.
 
 ## jscpd y knip
 

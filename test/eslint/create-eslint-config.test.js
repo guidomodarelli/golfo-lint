@@ -253,9 +253,20 @@ describe("createEslintConfig", () => {
     );
   });
 
-  it("no deja silenciar reglas con comentarios", async () => {
-    const ruleIds = await lintSnippet(DISABLED_RULE_SNIPPET);
-    assert.ok(ruleIds.includes("eslint-comments/no-use"));
+  it("no deja silenciar reglas con comentarios de ESLint ni de oxlint", async () => {
+    for (const snippet of [
+      DISABLED_RULE_SNIPPET,
+      DISABLED_RULE_SNIPPET.replace("eslint-disable", "oxlint-disable"),
+      '/* eslint eqeqeq: "off" */\nexport const isZero = (value) => value == 0;\n',
+    ]) {
+      const ruleIds = await lintSnippet(snippet);
+      assert.ok(ruleIds.includes("golfo-lint/no-lint-disable"), `${snippet}: ${ruleIds.join(", ")}`);
+    }
+  });
+
+  it("no confunde un comentario que menciona eslint con una directiva", async () => {
+    const ruleIds = await lintSnippet("// The eslint-disable comments are not allowed here.\nexport const total = 1;\n");
+    assert.deepEqual(ruleIds, []);
   });
 
   it("con allowDisableComments, exige explicar por qué se silencia una regla", async () => {

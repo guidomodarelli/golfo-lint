@@ -10,6 +10,20 @@ describe("createDependencyCruiserConfig", () => {
     assert.ok(ruleNames(createDependencyCruiserConfig({ hexagonalModulesPath: "src/modules" })).includes("domain-depends-on-nothing"));
   });
 
+  it("no deja que las capas de un módulo importen un setup.ts, la raíz de composición", () => {
+    const rule = createDependencyCruiserConfig({ hexagonalModulesPath: "src/modules" }).forbidden.find(
+      (forbiddenRule) => forbiddenRule.name === "layers-not-to-setup",
+    );
+    assert.ok(rule);
+    const from = new RegExp(/** @type {string} */ (rule.from.path), "u");
+    const to = new RegExp(/** @type {string} */ (rule.to.path), "u");
+    assert.equal(from.test("src/modules/events/application/use-cases/list-events.ts"), true);
+    assert.equal(from.test("src/modules/events/setup.ts"), false);
+    assert.equal(to.test("src/modules/events/setup.ts"), true);
+    assert.equal(to.test("src/modules/setup.ts"), true);
+    assert.equal(to.test("src/modules/events/application/setup-reminders.ts"), false);
+  });
+
   it("prohíbe las rutas que el proyecto indique, con su explicación", () => {
     const config = createDependencyCruiserConfig({
       forbiddenPaths: [{ name: "no-features", path: "^src/features/", comment: "Usá src/modules." }],

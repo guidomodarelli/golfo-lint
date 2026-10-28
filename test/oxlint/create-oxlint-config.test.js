@@ -44,10 +44,13 @@ describe("createOxlintConfig", () => {
       assert.equal(typeof entry, "object");
       assert.ok(existsSync(/** @type {{ specifier: string }} */ (entry).specifier), JSON.stringify(entry));
     }
-    const ruleNames = [config.rules ?? {}, ...(config.overrides ?? []).map((override) => override.rules ?? {})].flatMap(
-      (rules) => Object.keys(rules),
+    const ruleNames = new Set(
+      [config.rules ?? {}, ...(config.overrides ?? []).map((override) => override.rules ?? {})].flatMap((rules) =>
+        Object.keys(rules),
+      ),
     );
-    assert.deepEqual(ruleNames.filter((ruleName) => ruleName.startsWith("golfo-lint/")), []);
+    assert.ok(!ruleNames.has("golfo-lint/no-unnecessary-condition"));
+    assert.ok(ruleNames.has("golfo-lint/no-lint-disable"));
     assert.equal(config.options?.typeAware, true);
   });
 
@@ -55,6 +58,11 @@ describe("createOxlintConfig", () => {
     const config = await createOxlintConfig();
     assert.ok(Object.keys(config.rules ?? {}).some((ruleName) => ruleName.startsWith("unicorn-js/")));
     assert.ok((config.jsPlugins ?? []).some((entry) => typeof entry === "object" && entry.name === "unicorn-js"));
+  });
+
+  it("rechaza los comentarios oxlint-disable con la regla propia, cargada como plugin JS", async () => {
+    const codes = await lintFixture(["oxlint-disable.ts"]);
+    assert.ok(codes.includes("golfo-lint(no-lint-disable)"), codes.join(", "));
   });
 
   it("con tipos, reporta una promesa sin esperar", async () => {
