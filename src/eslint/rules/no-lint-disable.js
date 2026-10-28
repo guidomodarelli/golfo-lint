@@ -19,7 +19,7 @@ const INLINE_CONFIG_PATTERN = /^\s*(?:es|ox)lint\s+[@\w/-]+\s*:/u;
 
 /**
  * Checks whether a comment is a lint directive rather than prose.
- * @param {import("estree").Comment} comment - Comment of the file.
+ * @param {ReturnType<import("eslint").SourceCode["getAllComments"]>[number]} comment - Comment of the file.
  * @returns {boolean} Whether it disables, enables or reconfigures rules.
  */
 function isLintDirective(comment) {
