@@ -64,7 +64,8 @@ const AWS_CDK_RULE_PREFIX = "aws-";
 const TYPESCRIPT_FILE_GLOBS = ["**/*.{ts,tsx,mts,cts}"];
 
 /** Tool config files, whose job is the top-level side effect of exporting a computed config. */
-const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}"];
+/** Tool config files, which build their config at the top level: `next.config.ts`, `.dependency-cruiser.mjs`. */
+const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}", "**/.*.{js,mjs,cjs,ts,mts,cts}"];
 
 
 /** Root TypeScript config of a project. */
@@ -405,6 +406,32 @@ function createDirectiveCommentsConfig(allowDisableComments) {
 }
 
 /**
+ * React rules whose recommended options report sound code. In TuTribu every report of the rules turned off here was
+ * correct code:
+ * - `no-event-handler` and `no-pass-data-to-parent` read any effect guarded by a prop or that calls a callback as an
+ *   event handler, including the ones that sync with the URL, an external store, the clock or move the focus after a
+ *   render.
+ * - `no-autofocus` targets focus stolen on page load, but cannot tell it from the focus a step moves when the control
+ *   that opened it disappears, which is what keeps keyboard users in place.
+ * - `unicorn/no-document-cookie` asks for the Cookie Store API, which Safari ships since 18.4 and Firefox since 140.
+ * And `jsx-a11y` accepts `tabIndex` on a `region`: a scrollable region must be focusable (WCAG 2.1.1).
+ * @type {FlatConfig}
+ */
+const REACT_TUNING = {
+  name: "golfo-lint/react-tuning",
+  rules: {
+    "react-you-might-not-need-an-effect/no-event-handler": "off",
+    "react-you-might-not-need-an-effect/no-pass-data-to-parent": "off",
+    "jsx-a11y-x/no-autofocus": "off",
+    "unicorn/no-document-cookie": "off",
+    "jsx-a11y-x/no-noninteractive-tabindex": [
+      "error",
+      { tags: [], roles: ["tabpanel", "region"], allowExpressionValues: true },
+    ],
+  },
+};
+
+/**
  * Rules for the frameworks a project declares.
  * @param {{ react: boolean; next: boolean; vitest: boolean; testFiles: string[] }} frameworks - What the project uses.
  * @returns {FlatConfig[]} Config objects.
@@ -412,7 +439,7 @@ function createDirectiveCommentsConfig(allowDisableComments) {
 function createFrameworkConfigs(frameworks) {
   return [
     ...(frameworks.react
-      ? [reactHooks.configs.flat.recommended, jsxA11y.configs.recommended, reactEffects.configs.strict]
+      ? [reactHooks.configs.flat.recommended, jsxA11y.configs.recommended, reactEffects.configs.strict, REACT_TUNING]
       : []),
     ...(frameworks.next ? [nextPlugin.configs["core-web-vitals"]] : []),
     ...(frameworks.vitest && frameworks.testFiles.length > 0

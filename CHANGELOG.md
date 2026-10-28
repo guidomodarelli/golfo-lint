@@ -6,6 +6,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
+- Con `react`, el preset apaga reglas cuyos reportes en TuTribu eran todos código correcto: `react-you-might-not-need-an-effect/no-event-handler` y `no-pass-data-to-parent` (efectos que sincronizan la URL, un store externo, el reloj o el foco), `jsx-a11y-x/no-autofocus` (el foco que pasa al paso siguiente cuando desaparece el control que lo abrió) y `unicorn/no-document-cookie` (la Cookie Store API llegó a Safari 18.4 y Firefox 140). `jsx-a11y-x/no-noninteractive-tabindex` acepta `role="region"`, porque una región con scroll tiene que poder enfocarse (WCAG 2.1.1).
+- Los configs con punto (`.dependency-cruiser.mjs`, `.prettierrc.mjs`) cuentan como archivos de config y pueden armar su config en el nivel superior.
 - `@typescript-eslint/no-unused-vars` deja descartar propiedades con un resto (`const { password: _password, ...user } = row`) y marcar con `_` los parámetros que una firma necesita pero el cuerpo no lee, en lugar de obligar a `void name;`, que `no-meaningless-void-operator` rechaza.
 - `golfo-lint lint` corre el preset con `bun lint` (también dentro de `golfo-lint all`), unas cinco veces más rápido que ESLint (50 s contra 4 a 5 minutos en TuTribu) con los mismos hallazgos. Con la opción `linter: "bun"`, el preset usa la versión nativa de `@typescript-eslint/no-unnecessary-condition`, porque `bun lint` no les da tipos a las reglas de los plugins, y `golfo-lint lint` descarta los reportes que se apoyan en tipos que TypeScript no puede conocer, igual que `golfo-lint/no-unnecessary-condition`.
 - `vitest/valid-expect` acepta el mensaje como segundo argumento de `expect`.
