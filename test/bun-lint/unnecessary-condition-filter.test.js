@@ -97,6 +97,33 @@ describe("isReliableConditionReport", () => {
     assert.equal(isReliableConditionReport(reportAt(source, "!snapshot", "alwaysFalsy"), parse(source)), true);
   });
 
+  it("descarta un let con tipo unión que una asignación no literal achicó y un callback puede vaciar", () => {
+    const source = [
+      "declare function load(): Promise<{ id: string }>;",
+      "declare function onReset(clear: () => void): void;",
+      "export async function current(): Promise<string> {",
+      "  let item: { id: string } | undefined;",
+      "  onReset(() => { item = undefined; });",
+      "  item = await load();",
+      "  await load();",
+      "  if (!item) return '';",
+      "  return item.id;",
+      "}",
+    ].join("\n");
+    assert.equal(isReliableConditionReport(reportAt(source, "!item", "alwaysFalsy"), parse(source)), false);
+  });
+
+  it("toma igual un chequeo con corchetes y uno con punto sobre la misma propiedad", () => {
+    const source = [
+      "export async function load(signal: AbortSignal): Promise<void> {",
+      "  if (signal['aborted']) return;",
+      "  await fetch('/x');",
+      "  if (signal.aborted) return;",
+      "}",
+    ].join("\n");
+    assert.equal(isReliableConditionReport(reportAt(source, "signal.aborted", "alwaysFalsy"), parse(source, true)), false);
+  });
+
   it("descarta el chequeo de una API del entorno, que puede faltar", () => {
     const source = "export const newId = (): string | undefined => globalThis.crypto?.randomUUID();";
     assert.equal(isReliableConditionReport(reportAt(source, "?.", "neverOptionalChain"), parse(source)), false);
@@ -107,6 +134,12 @@ describe("isReliableConditionReport", () => {
     const report = reportAt(source, "head", "neverNullish");
     assert.equal(isReliableConditionReport(report, parse(source)), false);
     assert.equal(isReliableConditionReport(report, parse(source, true)), true);
+  });
+
+  it("no falla con un reporte que apunta más allá del final de un archivo que cambió", () => {
+    const source = "export const total = 1;";
+    const report = { ruleId: UNNECESSARY_CONDITION_RULE, messageId: "alwaysTruthy", line: 40, column: 3, endLine: 40, endColumn: 9 };
+    assert.equal(typeof isReliableConditionReport(report, parse(source)), "boolean");
   });
 
   it("no toca los reportes de otras reglas", () => {

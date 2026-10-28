@@ -59,7 +59,11 @@ const HOST_GLOBALS = new Set(["globalThis", "window", "self", "document", "navig
  * @returns {number} Offset.
  */
 function toOffset(sourceFile, line, column) {
-  return sourceFile.getPositionOfLineAndCharacter(line - 1, column - 1);
+  // A file edited after `bun lint` read it may be shorter than the report says: clamp instead of failing.
+  const lineStarts = sourceFile.getLineStarts();
+  const lineIndex = Math.min(Math.max(line - 1, 0), lineStarts.length - 1);
+  const lineEnd = lineIndex + 1 < lineStarts.length ? lineStarts[lineIndex + 1] : sourceFile.text.length;
+  return Math.min(lineStarts[lineIndex] + Math.max(column - 1, 0), lineEnd);
 }
 
 /**
@@ -173,7 +177,8 @@ function chainObject(node) {
 }
 
 /**
- * Writes a member path the same way whether it uses `?.` or `!`: `user?.profile!.name` is `user.profile.name`.
+ * Writes a member path the same way whether it uses `?.`, `!` or a static bracket: `user?.profile!["name"]` is
+ * `user.profile.name`.
  * @param {ts.Node} node - Member access or identifier.
  * @returns {string | undefined} The path, or `undefined` when it is not made of names.
  */
@@ -184,9 +189,25 @@ function memberPath(node) {
   if (ts.isNonNullExpression(node) || ts.isParenthesizedExpression(node)) {
     return memberPath(node.expression);
   }
+  const name = memberName(node);
+  if (name === undefined) {
+    return undefined;
+  }
+  const objectPath = memberPath(/** @type {ts.PropertyAccessExpression | ts.ElementAccessExpression} */ (node).expression);
+  return objectPath === undefined ? undefined : `${objectPath}.${name}`;
+}
+
+/**
+ * Reads the property name of a member access: `aborted` in `signal.aborted` and in `signal["aborted"]`.
+ * @param {ts.Node} node - Candidate member access.
+ * @returns {string | undefined} The name, or `undefined` when the node is not a member access with a static name.
+ */
+function memberName(node) {
   if (ts.isPropertyAccessExpression(node)) {
-    const objectPath = memberPath(node.expression);
-    return objectPath === undefined ? undefined : `${objectPath}.${node.name.text}`;
+    return node.name.text;
+  }
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) {
+    return node.argumentExpression.text;
   }
   return undefined;
 }
@@ -321,7 +342,7 @@ function earlierReadsInFunction(node, matches) {
  * @returns {boolean} Whether its type may come from stale narrowing.
  */
 function isNarrowedPropertyRead(node) {
-  if (!ts.isPropertyAccessExpression(node)) {
+  if (memberName(node) === undefined) {
     return false;
   }
   const readPath = memberPath(node);
@@ -330,7 +351,7 @@ function isNarrowedPropertyRead(node) {
   }
   return earlierReadsInFunction(
     node,
-    (candidate) => ts.isPropertyAccessExpression(candidate) && memberPath(candidate) === readPath,
+    (candidate) => memberName(candidate) !== undefined && memberPath(candidate) === readPath,
   ).some((read) => narrowsType(read));
 }
 
@@ -561,11 +582,13 @@ function isNarrowedMutableVariable(node) {
   let narrowed =
     declaration.initializer !== undefined &&
     (declaration.type !== undefined || isNarrowingLiteral(declaration.initializer));
-  // Later in the same function, a check or a literal assignment narrows again, and any other assignment gives the
-  // variable back its declared type.
+  // Later in the same function, a check or a literal assignment narrows again. Any assignment narrows a variable
+  // declared with a union (`let current: Item | undefined; current = await load()` leaves `Item`); without one, a
+  // nonliteral assignment gives the variable back its declared type.
+  const declaredAsUnion = declaration.type !== undefined && ts.isUnionTypeNode(declaration.type);
   for (const read of earlierReadsInFunction(node, (candidate) => ts.isIdentifier(candidate) && candidate.text === text)) {
     if (isAssignmentTarget(read)) {
-      narrowed = isLiteralAssignmentTarget(read);
+      narrowed = declaredAsUnion || isLiteralAssignmentTarget(read);
     } else if (narrowsType(read)) {
       narrowed = true;
     }

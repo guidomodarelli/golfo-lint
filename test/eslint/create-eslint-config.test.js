@@ -269,6 +269,7 @@ describe("createEslintConfig", () => {
       DISABLED_RULE_SNIPPET,
       DISABLED_RULE_SNIPPET.replace("eslint-disable", "oxlint-disable"),
       '/* eslint eqeqeq: "off" */\nexport const isZero = (value) => value == 0;\n',
+      '/* eslint "eqeqeq": "off" */\nexport const isZero = (value) => value == 0;\n',
     ]) {
       const ruleIds = await lintSnippet(snippet);
       assert.ok(ruleIds.includes("golfo-lint/no-lint-disable"), `${snippet}: ${ruleIds.join(", ")}`);

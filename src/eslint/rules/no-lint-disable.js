@@ -11,11 +11,11 @@
 const DISABLE_DIRECTIVE_PATTERN = /^\s*(?:es|ox)lint-(?:disable(?:-next-line|-line)?|enable)(?:\s|$)/u;
 
 /**
- * Inline rule config, which ESLint reads only from block comments: `eslint` or `oxlint`, then a rule name and a colon
- * (`/* eslint eqeqeq: "off" *\/`). A line comment that starts with the word, such as `// eslint reports this import`,
+ * Inline rule config, which ESLint reads only from block comments: `eslint` or `oxlint`, then a rule name, bare or
+ * quoted, and a colon (`/* eslint eqeqeq: "off" *\/`, `/* eslint "eqeqeq": "off" *\/`). A line comment that starts with the word, such as `// eslint reports this import`,
  * is prose.
  */
-const INLINE_CONFIG_PATTERN = /^\s*(?:es|ox)lint\s+[@\w/-]+\s*:/u;
+const INLINE_CONFIG_PATTERN = /^\s*(?:es|ox)lint\s+(?:"[^"]+"|'[^']+'|[@\w/-]+)\s*:/u;
 
 /**
  * Checks whether a comment is a lint directive rather than prose.
