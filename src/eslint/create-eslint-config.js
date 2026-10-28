@@ -33,6 +33,23 @@ import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules }
 import { noUnnecessaryCondition } from "./rules/no-unnecessary-condition.js";
 
 
+/**
+ * SonarJS rules the preset enables, besides `sonarjs/cognitive-complexity`: the ones that found real defects on
+ * TuTribu (200,000 lines). The rest of its `recommended` set found nothing there, repeated TypeScript or another
+ * rule, or only chose a spelling; under oxlint each one runs as a JS rule and costs time on every file.
+ */
+const SONARJS_RULES = [
+  "sonarjs/no-identical-functions",
+  "sonarjs/super-linear-regex",
+  "sonarjs/regex-complexity",
+  "sonarjs/no-nested-assignment",
+  "sonarjs/no-same-line-conditional",
+  "sonarjs/no-unused-collection",
+  "sonarjs/no-misleading-array-reverse",
+  "sonarjs/no-globals-shadowing",
+  "sonarjs/no-fixed-wait-in-tests",
+];
+
 /** Prefix of SonarJS's rules for AWS CDK infrastructure code (`sonarjs/aws-s3-bucket-public-access`, ...). */
 const AWS_CDK_RULE_PREFIX = "aws-";
 /** @typedef {import("eslint").Linter.Config} FlatConfig */
@@ -169,7 +186,16 @@ function createCoreRules() {
     "default-case-last": "error",
     // `== null` matches `null` and `undefined` on purpose; every other loose comparison is reported.
     eqeqeq: ["error", "always", { null: "ignore" }],
-    "id-length": ["error", { min: MIN_IDENTIFIER_LENGTH, exceptions: SHORT_IDENTIFIER_EXCEPTIONS, properties: "never" }],
+    // One uppercase letter is a type parameter (`<T>`), the usual name for it; oxlint checks them, ESLint does not.
+    "id-length": [
+      "error",
+      {
+        min: MIN_IDENTIFIER_LENGTH,
+        exceptions: SHORT_IDENTIFIER_EXCEPTIONS,
+        exceptionPatterns: ["^[A-Z]$"],
+        properties: "never",
+      },
+    ],
     "max-depth": ["error", MAX_NESTING_DEPTH],
     "max-lines-per-function": ["error", { max: MAX_FUNCTION_LINES, skipBlankLines: true, skipComments: true }],
     "max-nested-callbacks": ["error", MAX_NESTED_CALLBACKS],
@@ -280,8 +306,6 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // TypeScript and typed rules report these with the types: extra arguments are a compile error, and
         // comparisons that are always true or false go to `golfo-lint/no-unnecessary-condition`, which knows when the
         // types can be trusted; `@typescript-eslint/no-unnecessary-type-conversion` reports the same coercions.
-        "sonarjs/different-types-comparison": "off",
-        "sonarjs/no-extra-arguments": "off",
         "unicorn/no-useless-coercion": "off",
         // `switch-exhaustiveness-check` asks for every member of a union, also the one that shares the `default`
         // branch (`case "forbidden": default:`); this rule asks to delete that case, so the two contradict.
@@ -295,7 +319,6 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // `import { type A, type B }` keeps an empty side-effect import under `verbatimModuleSyntax`: when every
         // specifier is a type, `import type { A, B }`.
         "@typescript-eslint/no-import-type-side-effects": "error",
-        "@typescript-eslint/prefer-nullish-coalescing": "error",
         "@typescript-eslint/prefer-optional-chain": "error",
         "@typescript-eslint/switch-exhaustiveness-check": "error",
         "@typescript-eslint/only-throw-error": "error",
@@ -379,10 +402,10 @@ function createFrameworkConfigs(frameworks) {
             rules: {
               ...vitestPlugin.configs.recommended.rules,
               "vitest/no-standalone-expect": "error",
-              // `vitest/expect-expect` reports the same tests without assertions.
-              "sonarjs/assertions-in-tests": "off",
               "vitest/require-to-throw-message": "error",
               "vitest/valid-title": "error",
+              // Vitest's `expect(value, message)` takes the message that explains a failure.
+              "vitest/valid-expect": ["error", { maxArgs: 2 }],
             },
           }),
         ]
@@ -411,11 +434,30 @@ function createTestFilesConfig(testFiles) {
       "@typescript-eslint/no-magic-numbers": "off",
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
-      "sonarjs/no-duplicate-string": "off",
+      // Helpers that build fixtures take every value of the case, and a test's branches follow the cases it lists.
+      "@typescript-eslint/max-params": "off",
+      "sonarjs/cognitive-complexity": "off",
+      // `String(init?.body)` reads the body a test sent through a mocked `fetch`, typed as `BodyInit`.
+      "@typescript-eslint/no-base-to-string": "off",
+      // Tests rethrow what they caught, throw `null` to test how code handles it, and drop the `cause` of an error on
+      // purpose so private data stays out of the test output.
+      "@typescript-eslint/only-throw-error": "off",
+      "preserve-caught-error": "off",
+      // Playwright's `locator.innerText()` is not the DOM property.
+      "unicorn/prefer-dom-node-text-content": "off",
       // Tests replace `window` and `navigator` properties to simulate the browser.
       "unicorn/no-global-object-property-assignment": "off",
     },
   };
+}
+
+/**
+ * Turns rules on as errors.
+ * @param {string[]} ruleNames - Fully qualified rule names.
+ * @returns {Record<string, "error">} Rule entries.
+ */
+function turnOnRules(ruleNames) {
+  return Object.fromEntries(ruleNames.map((ruleName) => [ruleName, "error"]));
 }
 
 /**
@@ -472,7 +514,11 @@ export function createEslintConfig(options = {}) {
     importX.flatConfigs.typescript,
     promisePlugin.configs["flat/recommended"],
     regexpPlugin.configs["flat/recommended"],
-    sonarjs.configs.recommended,
+    {
+      name: "golfo-lint/sonarjs",
+      plugins: { sonarjs },
+      rules: turnOnRules(awsCdk ? [...SONARJS_RULES, ...listAwsCdkRules()] : SONARJS_RULES),
+    },
     // `unopinionated` leaves out unicorn's style preferences; only rules about behavior and APIs remain.
     unicorn.configs.unopinionated,
     ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) : []),
@@ -490,6 +536,5 @@ export function createEslintConfig(options = {}) {
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
     { name: "golfo-lint/no-duplicates", rules: turnOffRules(DUPLICATED_RULES) },
     { name: "golfo-lint/no-false-alarms", rules: turnOffRules(NON_DEFECT_RULES) },
-    ...(awsCdk ? [] : [{ name: "golfo-lint/no-aws-cdk", rules: turnOffRules(listAwsCdkRules()) }]),
   ]);
 }

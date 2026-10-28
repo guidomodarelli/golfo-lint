@@ -34,6 +34,10 @@
       "types": "./src/eslint/index.d.ts",
       "default": "./src/eslint/index.js"
     },
+    "./oxlint": {
+      "types": "./src/oxlint/index.d.ts",
+      "default": "./src/oxlint/index.js"
+    },
     "./jscpd": {
       "types": "./src/jscpd/index.d.ts",
       "default": "./src/jscpd/index.js"
@@ -83,13 +87,21 @@
   "peerDependencies": {
     "eslint": "^10.4.0",
     "react-doctor": "^0.9.18",
-    "react-scan": "^0.5.7"
+    "react-scan": "^0.5.7",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": ">=7.0.2005"
   },
   "peerDependenciesMeta": {
     "react-doctor": {
       "optional": true
     },
     "react-scan": {
+      "optional": true
+    },
+    "oxlint": {
+      "optional": true
+    },
+    "oxlint-tsgolint": {
       "optional": true
     }
   },
@@ -98,6 +110,7 @@
     "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
     "@eslint/js": "10.0.1",
     "@next/eslint-plugin-next": "16.4.1",
+    "@oxlint/migrate": "1.90.0",
     "@vitest/eslint-plugin": "1.6.27",
     "dependency-cruiser": "18.7.0",
     "eslint-import-resolver-typescript": "4.4.5",
@@ -123,6 +136,8 @@
     "@golfo/rp": "2.0.0",
     "@types/node": "24.19.2",
     "eslint": "10.13.0",
+    "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005",
     "react-doctor": "0.9.18",
     "react-scan": "0.5.7"
   }

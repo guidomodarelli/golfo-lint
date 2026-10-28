@@ -37,16 +37,6 @@ export const STYLISTIC_SUGGESTION_RULES = [
   "regexp/sort-flags",
   "regexp/unicode-escape",
   "regexp/use-ignore-case",
-  // SonarJS: type and test layout preferences (`expect(a === b).toBe(true)` or `expect(a).toBe(b)`).
-  "sonarjs/parameterized-tests",
-  "sonarjs/prefer-specific-assertions",
-  "sonarjs/redundant-type-aliases",
-  "sonarjs/use-type-alias",
-  "sonarjs/void-use",
-  // Template literals inside template literals, and multiline blocks without braces: how the code is laid out,
-  // which a formatter settles (`if (ready) start(); stop();` on one line becomes two lines with their indentation).
-  "sonarjs/no-nested-template-literals",
-  "sonarjs/no-unenclosed-multiline-block",
   // unicorn: control flow written another way (`if` or ternary, `.then` or `await`, early return or `else`).
   "unicorn/consistent-conditional-object-spread",
   "unicorn/no-declarations-before-early-exit",
@@ -115,10 +105,9 @@ export const STYLISTIC_SUGGESTION_RULES = [
   // promise: the name of the executor parameters, and returning from a `then` callback that has nothing to return.
   "promise/always-return",
   "promise/param-names",
-  // Braces around a one-statement `if`, `readonly` on props React never mutates, `crypto` or `node:crypto`,
+  // Braces around a one-statement `if`, `crypto` or `node:crypto`,
   // `.some((item) => item === value)` or `.includes(value)`, `< 0` or `=== -1`.
   "curly",
-  "sonarjs/prefer-read-only-props",
   "unicorn/consistent-existence-index-check",
   "unicorn/prefer-includes",
   "unicorn/prefer-node-protocol",
@@ -130,30 +119,7 @@ export const STYLISTIC_SUGGESTION_RULES = [
  */
 export const DUPLICATED_RULES = [
   // `no-nested-ternary` stays.
-  "sonarjs/no-nested-conditional",
   "unicorn/no-unnecessary-nested-ternary",
-  // `@typescript-eslint/no-deprecated` stays.
-  "sonarjs/deprecation",
-  // `regexp/no-dupe-characters-character-class` stays.
-  "sonarjs/duplicates-in-character-class",
-  // `regexp/no-super-linear-backtracking` and `sonarjs/super-linear-regex` stay: they find different cases.
-  // `unicorn/prefer-boolean-return` is a syntax preference, so neither stays.
-  "sonarjs/prefer-single-boolean-return",
-  // `@typescript-eslint/require-array-sort-compare` stays: it knows the element type and accepts arrays of
-  // strings, which this one reports and pushes towards `localeCompare`, whose order changes with the locale.
-  // `unicorn/require-array-sort-compare` is turned off only where the typed rule runs.
-  "sonarjs/no-alphabetical-sort",
-  // `import-x/no-cycle` and dependency-cruiser's `no-circular` both stay: one in the editor, one per repository.
-  // `@typescript-eslint/no-unused-vars` stays.
-  "sonarjs/no-unused-vars",
-  "sonarjs/unused-import",
-  // `no-useless-assignment` stays.
-  "sonarjs/no-dead-store",
-  // `max-nested-callbacks` stays.
-  "sonarjs/no-nested-functions",
-  // Committed secrets: `golfo-lint secrets` (gitleaks) checks every file and the whole history.
-  "sonarjs/no-hardcoded-passwords",
-  "sonarjs/no-hardcoded-secrets",
 ];
 
 /**
@@ -161,16 +127,16 @@ export const DUPLICATED_RULES = [
  * that forbid a correct pattern. An agent cannot tell when to leave the code as it is, so they stay off.
  */
 export const NON_DEFECT_RULES = [
-  // SonarJS security hotspots ("make sure ... is safe here"): `spawn("git")` resolved through `PATH`, public DNS
-  // addresses, `http://` URLs in tests, `Math.random()` for jitter.
-  "sonarjs/no-clear-text-protocols",
-  "sonarjs/no-hardcoded-ip",
-  "sonarjs/no-os-command-from-path",
-  "sonarjs/os-command",
-  "sonarjs/pseudo-random",
-  // Reassigning a variable that an event handler or callback changed after an `await`: the rule assumes nothing
-  // else writes it. It is also one of the slowest rules of the preset.
-  "sonarjs/no-redundant-assignments",
+  // `value || fallback` on a string or a number that falls back on `""` or `0` on purpose (`message?.trim() || null`,
+  // `offsetWidth || DEFAULT_WIDTH`): `??` would keep them. On objects both operators do the same.
+  "@typescript-eslint/prefer-nullish-coalescing",
+  // Assertions inside a branch of a parametrized or browser test (`if (mode !== "pagehide") await expect...`): the
+  // test chooses what to check for each case.
+  "vitest/no-conditional-expect",
+  // Patterns that reject or strip control characters list them on purpose (`/[\u0000-\u001F]/u`).
+  "no-control-regex",
+  // Node APIs and their test doubles that need an `EventEmitter` (a `pg` client, a stream).
+  "unicorn/prefer-event-target",
   // `new Promise((resolve) => setTimeout(resolve, ms))` returns the timer id, which nobody reads.
   "no-promise-executor-return",
   // Scripts that export their functions so tests can import them.

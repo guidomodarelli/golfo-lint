@@ -4,6 +4,21 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+### Added
+
+- `@golfo/lint/oxlint` con `createOxlintConfig()`: corre el preset con oxlint, unas cuatro veces más rápido que ESLint (77 s contra 4 a 5 minutos en TuTribu). Las reglas que oxlint implementa corren en nativo, las que necesitan tipos con tsgolint, y el resto con los plugins originales como plugins JS. `golfo-lint/no-unnecessary-condition` no corre con oxlint.
+- `vitest/valid-expect` acepta el mensaje como segundo argumento de `expect`.
+
+### Changed
+
+- SonarJS deja de usar su `recommended`: quedan la complejidad cognitiva y las reglas que encontraron defectos reales en TuTribu. El resto no encontró nada, repetía otra regla o solo elegía una forma de escribir.
+- En los tests ya no se exigen `max-params`, la complejidad cognitiva, `no-base-to-string`, `only-throw-error`, `preserve-caught-error` ni `prefer-dom-node-text-content` (Playwright).
+- `id-length` acepta una mayúscula sola, el nombre de un parámetro de tipo (`<T>`).
+
+### Removed
+
+- `@typescript-eslint/prefer-nullish-coalescing`, `vitest/no-conditional-expect`, `no-control-regex` y `unicorn/prefer-event-target`: en TuTribu reportaban sobre todo código correcto (un `||` que cae al valor por defecto con `""` o `0` a propósito, aserciones por caso en tests parametrizados, patrones que rechazan caracteres de control, dobles de `pg` que necesitan un `EventEmitter`).
+
 ## [0.2.1] - 2026-10-27
 
 ### Fixed
