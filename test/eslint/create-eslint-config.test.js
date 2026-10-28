@@ -276,8 +276,13 @@ describe("createEslintConfig", () => {
   });
 
   it("no confunde un comentario que menciona eslint con una directiva", async () => {
-    const ruleIds = await lintSnippet("// The eslint-disable comments are not allowed here.\nexport const total = 1;\n");
-    assert.deepEqual(ruleIds, []);
+    for (const snippet of [
+      "// The eslint-disable comments are not allowed here.\nexport const total = 1;\n",
+      "// eslint reports this import as unused when the type goes away.\nexport const total = 1;\n",
+      "/* oxlint runs before the tests. */\nexport const total = 1;\n",
+    ]) {
+      assert.deepEqual(await lintSnippet(snippet), [], snippet);
+    }
   });
 
   it("con allowDisableComments, exige explicar por qué se silencia una regla", async () => {
