@@ -275,6 +275,20 @@ describe("createEslintConfig", () => {
     }
   });
 
+  it("deja descartar propiedades con un resto y marcar con _ los parámetros que no se leen", async () => {
+    const snippet = [
+      "export const withoutPassword = (row) => {",
+      "  const { password: _password, ...user } = row;",
+      "  return user;",
+      "};",
+      "export const respond = (..._args) => 1;",
+      "export const [, second] = [1, 2];",
+      "",
+    ].join("\n");
+    const ruleIds = await lintSnippet(snippet);
+    assert.ok(!ruleIds.some((ruleId) => ruleId.endsWith("no-unused-vars")), ruleIds.join(", "));
+  });
+
   it("no confunde un comentario que menciona eslint con una directiva", async () => {
     for (const snippet of [
       "// The eslint-disable comments are not allowed here.\nexport const total = 1;\n",

@@ -233,6 +233,12 @@ function createCoreRules() {
 function createPluginRules() {
   return {
     "@typescript-eslint/max-params": ["error", { max: MAX_FUNCTION_PARAMETERS }],
+    // `const { password: _password, ...user } = row` drops a property on purpose, and a `_` prefix marks a parameter a
+    // signature needs but the body does not read (`vi.fn(async (..._args: unknown[]) => response)`).
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { ignoreRestSiblings: true, argsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+    ],
     "@typescript-eslint/no-magic-numbers": [
       "error",
       {
