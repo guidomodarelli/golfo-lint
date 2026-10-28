@@ -113,6 +113,18 @@ describe("isReliableConditionReport", () => {
     assert.equal(isReliableConditionReport(reportAt(source, "!item", "alwaysFalsy"), parse(source)), false);
   });
 
+  it("descarta una propiedad que una función de aserción achicó antes de un await", () => {
+    const source = [
+      "declare function assert(value: unknown): asserts value;",
+      "export async function load(signal: AbortSignal): Promise<void> {",
+      "  assert(!signal.aborted);",
+      "  await fetch('/x');",
+      "  if (signal.aborted) return;",
+      "}",
+    ].join("\n");
+    assert.equal(isReliableConditionReport(reportAt(source, "if ([signal.aborted])", "alwaysFalsy"), parse(source)), false);
+  });
+
   it("toma igual un chequeo con corchetes y uno con punto sobre la misma propiedad", () => {
     const source = [
       "export async function load(signal: AbortSignal): Promise<void> {",

@@ -40,6 +40,32 @@ const ESLINT_CONFIG_FILES = [
  */
 const BUN_LINT_ARGUMENTS = ["lint", "--no-script", "--type-aware"];
 
+/** Flags that pick the config file `bun lint` reads. */
+const CONFIG_FLAGS = new Set(["-c", "--config"]);
+
+/**
+ * Finds the ESLint config of the project.
+ * @param {string} cwd - Project folder.
+ * @returns {string | undefined} Its file name, or `undefined` when there is none.
+ */
+function findEslintConfig(cwd) {
+  return ESLINT_CONFIG_FILES.find((fileName) => existsSync(path.join(cwd, fileName)));
+}
+
+/**
+ * Picks the config `bun lint` must read: the one the caller passed, or else the project's ESLint config. `bun lint`
+ * prefers an `.oxlintrc.json` over `eslint.config.js`, so without `--config` a leftover oxlint config would replace the
+ * preset.
+ * @param {string[]} toolArguments - Arguments the caller passed through.
+ * @param {string} cwd - Project folder.
+ * @returns {string[]} `--config` and the file, or nothing when the caller already chose one.
+ */
+function configArguments(toolArguments, cwd) {
+  const chosen = toolArguments.some((argument) => CONFIG_FLAGS.has(argument) || argument.startsWith("--config="));
+  const configFile = findEslintConfig(cwd);
+  return chosen || configFile === undefined ? [] : ["--config", configFile];
+}
+
 /** Severity ESLint's JSON report gives errors. */
 const ERROR_SEVERITY = 2;
 
@@ -99,10 +125,7 @@ function filterResults(results) {
 /** @type {LintCommand} */
 export const lintCommand = {
   description: "Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js y tests (bun lint).",
-  skipReason: (cwd) =>
-    ESLINT_CONFIG_FILES.some((fileName) => existsSync(path.join(cwd, fileName)))
-      ? undefined
-      : "el proyecto no tiene eslint.config",
+  skipReason: (cwd) => (findEslintConfig(cwd) === undefined ? "el proyecto no tiene eslint.config" : undefined),
   async run(context) {
     const reportDirectory = mkdtempSync(path.join(os.tmpdir(), "golfo-lint-bun-lint-"));
     const reportPath = path.join(reportDirectory, "report.json");
@@ -111,7 +134,15 @@ export const lintCommand = {
         name: "bun lint",
         candidates: [{ command: "bun", prefixArguments: [] }],
         installHint: "Instalá Bun (https://bun.com): `bun lint` está en Bun canary (`bun upgrade --canary`) hasta 1.4.5.",
-        arguments: [...BUN_LINT_ARGUMENTS, "--format", "json", "--output-file", reportPath, ...context.toolArguments],
+        arguments: [
+          ...BUN_LINT_ARGUMENTS,
+          ...configArguments(context.toolArguments, context.cwd),
+          "--format",
+          "json",
+          "--output-file",
+          reportPath,
+          ...context.toolArguments,
+        ],
       });
       if (exitCode === EXIT_CODE_TOOL_UNAVAILABLE) {
         return exitCode;
@@ -122,11 +153,20 @@ export const lintCommand = {
         return EXIT_CODE_TOOL_UNAVAILABLE;
       }
       const reported = filterResults(results);
+      // Any other exit code means some rules did not run (`bun lint` exits with 2 when the config has a plugin rule
+      // that needs types, and lints everything else), so a clean report is not a pass.
+      const ranEveryRule = exitCode === EXIT_CODE_SUCCESS || exitCode === EXIT_CODE_PROBLEMS_FOUND;
+      if (reported.length > 0) {
+        context.warn(formatResults(reported, context.cwd));
+      }
+      if (!ranEveryRule) {
+        context.warn(`golfo-lint: bun lint terminó con código ${exitCode}: algunas reglas no corrieron (ver arriba).`);
+        return EXIT_CODE_TOOL_UNAVAILABLE;
+      }
       if (reported.length === 0) {
         context.log("bun lint: sin problemas.");
         return EXIT_CODE_SUCCESS;
       }
-      context.warn(formatResults(reported, context.cwd));
       return EXIT_CODE_PROBLEMS_FOUND;
     } finally {
       rmSync(reportDirectory, { recursive: true, force: true });

@@ -273,7 +273,7 @@ function narrowingVerdict(parent, node) {
       return true;
     }
   }
-  if (isConditionOf(parent, node)) {
+  if (isConditionOf(parent, node) || isAssertionArgument(parent, node)) {
     return true;
   }
   const passesThrough =
@@ -282,6 +282,22 @@ function narrowingVerdict(parent, node) {
     ts.isTypeOfExpression(parent) ||
     (ts.isPrefixUnaryExpression(parent) && parent.operator === ts.SyntaxKind.ExclamationToken);
   return passesThrough ? undefined : false;
+}
+
+/**
+ * Checks whether an expression is the argument of a call whose result is discarded (`assert(!signal.aborted);`), the
+ * shape of an `asserts value` function, which narrows its argument for the code after it. Without types the filter
+ * cannot read the signature, so every such call counts.
+ * @param {ts.Node} parent - Candidate call.
+ * @param {ts.Node} node - Candidate argument.
+ * @returns {boolean} Whether `node` is an argument of a call used as a statement.
+ */
+function isAssertionArgument(parent, node) {
+  return (
+    ts.isCallExpression(parent) &&
+    parent.arguments.some((argument) => argument === node) &&
+    ts.isExpressionStatement(parent.parent)
+  );
 }
 
 /**
