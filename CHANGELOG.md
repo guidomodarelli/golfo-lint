@@ -6,9 +6,9 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
-- `@golfo/lint/oxlint` con `createOxlintConfig()`: corre el preset con oxlint, unas cuatro veces más rápido que ESLint (77 s contra 4 a 5 minutos en TuTribu). Las reglas que oxlint implementa corren en nativo, las que necesitan tipos con tsgolint, y el resto con los plugins originales como plugins JS. `golfo-lint/no-unnecessary-condition` no corre con oxlint.
+- Opción `linter: "bun"` para correr el preset con `bun lint`, unas cinco veces más rápido que ESLint (47 s contra 4 a 5 minutos en TuTribu) con los mismos hallazgos: deja afuera `golfo-lint/no-unnecessary-condition`, porque `bun lint` no les da tipos a las reglas de los plugins.
 - `vitest/valid-expect` acepta el mensaje como segundo argumento de `expect`.
-- `golfo-lint/no-lint-disable` reemplaza a `eslint-comments/no-use`: también rechaza `oxlint-disable`, que oxlint respeta igual que `eslint-disable`.
+- `golfo-lint/no-lint-disable` reemplaza a `eslint-comments/no-use`: también rechaza `oxlint-disable`.
 - dependency-cruiser, con `hexagonalModulesPath`: `layers-not-to-setup` impide que una capa importe un `setup.ts`, la raíz de composición.
 - `@typescript-eslint/no-magic-numbers` exige `const`: un número en un `let` puede cambiar en la línea siguiente.
 

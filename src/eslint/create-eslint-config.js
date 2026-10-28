@@ -34,6 +34,11 @@ import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules }
 import GOLFO_LINT_PLUGIN from "./plugin.js";
 
 
+/** @typedef {"eslint" | "bun"} Linter */
+
+/** `bun lint`, which reads this ESLint config and runs the rules natively or as JavaScript plugins. */
+const BUN_LINTER = "bun";
+
 /**
  * SonarJS rules the preset enables, besides `sonarjs/cognitive-complexity`: the ones that found real defects on
  * TuTribu (200,000 lines). The rest of its `recommended` set found nothing there, repeated TypeScript or another
@@ -166,6 +171,8 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * @property {boolean} [awsCdk] - Whether to enable SonarJS's AWS CDK rules (`sonarjs/aws-*`), which check
  * infrastructure written with `aws-cdk-lib` (default `false`: in other projects they cannot report anything, and
  * they take about a tenth of the lint time).
+ * @property {Linter} [linter] - Which linter runs the config: `eslint` (default) or `bun` for `bun lint`, which runs
+ * plugin rules in JavaScript without type information and so leaves out `golfo-lint/no-unnecessary-condition`.
  * @property {boolean} [allowDisableComments] - Whether `eslint-disable` comments may silence a rule, as long as
  * they explain why (default `false`: an agent has to fix the code, not silence the linter).
  * @property {string[]} [ignores] - Extra globs to skip, besides dependencies and build output.
@@ -280,11 +287,12 @@ function detectTsconfigFiles(tsconfigRootDir) {
 
 /**
  * Type-aware rules for TypeScript files, beyond `strictTypeChecked`.
- * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] | undefined }} typescriptProject - Where the
- * TypeScript configs are, and which ones to load (`undefined`: detect them; none: the project service finds them).
+ * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] | undefined; linter: Linter }} typescriptProject -
+ * Where the TypeScript configs are, which ones to load (`undefined`: detect them; none: the project service finds
+ * them), and which linter runs the config.
  * @returns {FlatConfig[]} Config objects.
  */
-function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
+function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles, linter }) {
   const configFiles = tsconfigFiles ?? detectTsconfigFiles(tsconfigRootDir);
   const projectOptions = configFiles.length > 0 ? { project: configFiles } : { projectService: true };
   return [
@@ -297,7 +305,8 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // Same rule without the reports that rest on narrowing TypeScript cannot keep (a property read again after
         // an `await`) or on array elements typed as always present: see `rules/no-unnecessary-condition.js`.
         "@typescript-eslint/no-unnecessary-condition": "off",
-        "golfo-lint/no-unnecessary-condition": "error",
+        // `bun lint` runs plugin rules in JavaScript without type information, so the rule cannot run there.
+        ...(linter === BUN_LINTER ? {} : { "golfo-lint/no-unnecessary-condition": "error" }),
         // Sorting without a compare function orders numbers and objects as strings. Arrays of strings sort by code
         // unit on purpose (stable ids, canonical keys), where `localeCompare` would make the order depend on the locale.
         "@typescript-eslint/require-array-sort-compare": ["error", { ignoreStringArrays: true }],
@@ -489,6 +498,7 @@ export function createEslintConfig(options = {}) {
     next: false,
     vitest: false,
     awsCdk: false,
+    linter: "eslint",
     allowDisableComments: false,
     ignores: [],
     testFiles: TEST_FILE_GLOBS,
@@ -501,6 +511,7 @@ export function createEslintConfig(options = {}) {
     next,
     vitest,
     awsCdk,
+    linter,
     allowDisableComments,
     ignores,
     testFiles,
@@ -523,7 +534,7 @@ export function createEslintConfig(options = {}) {
     },
     // `unopinionated` leaves out unicorn's style preferences; only rules about behavior and APIs remain.
     unicorn.configs.unopinionated,
-    ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) : []),
+    ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles, linter }) : []),
     ...createFrameworkConfigs({ react, next, vitest, testFiles }),
     {
       name: "golfo-lint/quality",

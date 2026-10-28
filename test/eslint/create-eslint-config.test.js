@@ -70,6 +70,16 @@ describe("createEslintConfig", () => {
     });
   }
 
+  it("con linter bun, deja afuera la regla propia que necesita tipos, que bun lint no le puede dar", async () => {
+    const isOwnTypedRule = (/** @type {{ ruleName: string }} */ { ruleName }) =>
+      ruleName === "golfo-lint/no-unnecessary-condition";
+    const withEslint = await listEnabledRules({ typeChecked: true }, "formatted-badly.ts");
+    const withBun = await listEnabledRules({ typeChecked: true, linter: "bun" }, "formatted-badly.ts");
+    assert.ok(withEslint.some(isOwnTypedRule));
+    assert.deepEqual(withBun.filter(isOwnTypedRule), []);
+    assert.ok(withBun.some(({ ruleName }) => ruleName === "@typescript-eslint/no-floating-promises"));
+  });
+
   it("apaga las reglas de AWS CDK salvo con awsCdk", async () => {
     const isAwsCdkRule = (/** @type {{ ruleName: string }} */ { ruleName }) => ruleName.startsWith("sonarjs/aws-");
     const withoutAwsCdk = await listEnabledRules({ typeChecked: false }, "snippet.js");
