@@ -4,6 +4,10 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+### Fixed
+
+- `golfo-lint unused` ya no reporta como archivos sin uso las configs en JavaScript de dependency-cruiser (`.dependency-cruiser.mjs`) y de Stylelint que cargan `golfo-lint architecture` y `golfo-lint styles`: knip no las encontraba porque el proyecto no depende de esas herramientas, sino de golfo-lint.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added

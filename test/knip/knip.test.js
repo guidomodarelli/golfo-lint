@@ -46,6 +46,7 @@ describe("createKnipConfig", () => {
       "open-next.config.ts",
       ".golfo-rp/*.{js,cjs,mjs}",
       "scripts/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+      ".dependency-cruiser.mjs",
       "tests/runtime/*/index.ts",
     ]);
     assert.equal(createKnipConfig({}, { projectDirectory: fixturePath("knip-project") }).entry, undefined);

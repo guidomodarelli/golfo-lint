@@ -55,12 +55,26 @@ const PLAYWRIGHT_CONFIG_PATTERN = /^playwright(?:\.[\w-]+)?\.config\.[cm]?[jt]s$
  * Entry files that tools other than knip's plugins load, kept only when they exist:
  * - `open-next.config.ts`, read by OpenNext when it builds a Next.js app for Cloudflare;
  * - the scripts `@golfo/rp` writes to `.golfo-rp/` (`vercel.json` runs `.golfo-rp/vercel-ignore-build.mjs`);
- * - `scripts/`, Node.js scripts that people and CI jobs run by path (`node scripts/configure-cors.mjs`).
+ * - `scripts/`, Node.js scripts that people and CI jobs run by path (`node scripts/configure-cors.mjs`);
+ * - the dependency-cruiser and Stylelint configs in JavaScript, which `golfo-lint architecture` and `golfo-lint styles`
+ *   load; knip's plugins for those tools only turn on when the project depends on the tool, and here golfo-lint does.
  */
 const TOOL_ENTRY_FILES = [
   { path: "open-next.config.ts", pattern: "open-next.config.ts" },
   { path: ".golfo-rp", pattern: ".golfo-rp/*.{js,cjs,mjs}" },
   { path: "scripts", pattern: `scripts/**/*.{${MODULE_EXTENSIONS.join(",")}}` },
+  ...[
+    ".dependency-cruiser.js",
+    ".dependency-cruiser.cjs",
+    ".dependency-cruiser.mjs",
+    ".stylelintrc.js",
+    ".stylelintrc.cjs",
+    ".stylelintrc.mjs",
+    "stylelint.config.js",
+    "stylelint.config.cjs",
+    "stylelint.config.mjs",
+    "stylelint.config.ts",
+  ].map((fileName) => ({ path: fileName, pattern: fileName })),
 ];
 
 /** Dependency fields where a project declares the packages it uses. */
