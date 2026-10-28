@@ -4,8 +4,17 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+### Removed
+
+- `golfo-lint react` deja de mostrar `no-layout-property-animation`, `no-array-index-as-key` y `no-locale-format-in-render` de react-doctor: son consejos que no puede decidir. Animar `width` o `height` es lo que reacomoda el contenido de alrededor; una key por índice solo falla si la lista se reordena y sus ítems guardan estado; y no sabe si una fecha formateada llega al render del servidor, mientras que su arreglo (fijar `timeZone`) cambia la hora que ve el usuario. En TuTribu, los 11 reportes eran código correcto.
+
 ### Fixed
 
+- `golfo-lint react` ya no reporta `sql.raw(...)` cuando recibe un ternario o un template literal armados con SQL fijo, ni un parámetro cuyo tipo declarado solo admite valores fijos: una unión de literales, `typeof X.clave` o `(typeof X)[keyof typeof X]` de un objeto `as const`, también a través de un alias de tipo local o importado del proyecto. Un parámetro de tipo abierto o genérico, o uno que la función reasigna, se sigue reportando.
+- `golfo-lint react` ya no reporta `no-set-state-after-await-in-effect` cuando cada llamada posterior a un `await` está detrás de una guarda que el cleanup del efecto vuelve verdadera: una bandera que el cleanup cambia y nadie más escribe, o `signal.aborted` de un `AbortController` que el cleanup aborta, también combinadas con otra condición (`if (!isActive || isAbortError(error)) return;`).
+- `golfo-lint react` ya no reporta `no-loading-flag-reset-outside-finally` cuando el reset está en un `finally` y su condición no lee nada que el `try` o el `catch` asignan, como el chequeo de que la corrida sigue siendo la dueña (`if (controller.current === current)`).
+- `golfo-lint react` ya no reporta `no-prop-callback-in-render` cuando el callback es el setter de `useState` o `useReducer` del propio componente, que llega por otros hooks del mismo archivo. Un callback que llega por props, por un hook exportado o por un valor que se modifica se sigue reportando.
+- `golfo-lint react` ya no reporta `effect-needs-cleanup` cuando el método que react-doctor toma por una suscripción por su nombre (`observe`, `subscribe`...) está declarado en el proyecto como `Promise<void>`, una operación que termina sola y no devuelve nada que liberar.
 - `golfo-lint unused` ya no reporta como archivos sin uso las configs en JavaScript de dependency-cruiser (`.dependency-cruiser.mjs`) y de Stylelint que cargan `golfo-lint architecture` y `golfo-lint styles`: knip no las encontraba porque el proyecto no depende de esas herramientas, sino de golfo-lint.
 
 ## [0.3.0] - 2026-10-28

@@ -5,7 +5,11 @@
  * advice that breaks valid code when applied blindly. golfo-lint keeps one finding per problem, so it drops them.
  */
 import { usesOnlyConstantRawSql } from "./constant-sql.js";
+import { cancelsBeforeStateWrites } from "./effect-cancellation.js";
 import { checksFetchStatus } from "./fetch-status.js";
+import { resetsInFinally } from "./finally-reset.js";
+import { callsOwnStateSetter } from "./state-setter-origin.js";
+import { callsPromiseMethod } from "./subscription-call.js";
 
 /** react-doctor plugins whose rules the ESLint preset or another golfo-lint analysis already runs. */
 const DUPLICATED_PLUGINS = new Set([
@@ -84,6 +88,17 @@ const EXCLUDED_REACT_DOCTOR_RULES = new Set([
   // Migration advice from Zod 3 to Zod 4, also reported on projects that already run Zod 4. APIs that Zod 4
   // deprecates carry `@deprecated`, which `@typescript-eslint/no-deprecated` reports.
   "zod-v4-no-deprecated-schema-apis",
+  // Performance advice: animating `width` or `height` is what makes the content around reflow (a sidebar that
+  // pushes the page, a breadcrumb that moves the next ones); `transform` would overlap or stretch it instead.
+  "no-layout-property-animation",
+  // An index key breaks only when the list reorders or inserts and its items keep state. react-doctor knows neither,
+  // and reports fixed rows, positional placeholders that morph into the item of their slot and generated slots
+  // (`Array.from({ length })`) alike. No ESLint rule of the preset reports index keys.
+  "no-array-index-as-key",
+  // Whether a formatted date reaches the server render depends on runtime state react-doctor cannot follow (a dialog
+  // that only opens after a click, state set by a handler), and its fix, a fixed `timeZone`, changes the time users
+  // see. React reports the hydration mismatches that do happen.
+  "no-locale-format-in-render",
 ]);
 
 /**
@@ -112,6 +127,34 @@ const FETCH_STATUS_RULE = "no-fetch-response-used-without-status-check";
  * cannot carry user input. The finding is dropped only when every `sql.raw(...)` of the file has such an argument.
  */
 const RAW_SQL_RULE = "raw-sql-injection-risk";
+
+/**
+ * `no-set-state-after-await-in-effect` accepts a guard on a flag that the cleanup flips, but not `signal.aborted` of
+ * a controller the cleanup aborts nor a flag combined with a call. The finding points at the effect; it is dropped
+ * when no call after an `await` can run once the cleanup has run (see `effect-cancellation.js`).
+ */
+const SET_STATE_AFTER_AWAIT_RULE = "no-set-state-after-await-in-effect";
+
+/**
+ * `no-loading-flag-reset-outside-finally` also reports a reset inside `finally` when an `if` guards it, as an
+ * ownership check (`if (controller.current === current)`). The finding points at the reset; it is dropped when the
+ * reset is in a `finally` and its conditions read nothing the `try` or the `catch` assigns.
+ */
+const LOADING_FLAG_RULE = "no-loading-flag-reset-outside-finally";
+
+/**
+ * `no-prop-callback-in-render` takes any callback a hook receives for a callback of the parent. The finding points at
+ * the call; it is dropped when the callee is the `useState` setter of the rendering component, followed through the
+ * hooks of the same file.
+ */
+const PROP_CALLBACK_RULE = "no-prop-callback-in-render";
+
+/**
+ * `effect-needs-cleanup` recognizes subscriptions by the method name (`observe`, `subscribe`...). The finding points
+ * at the call; it is dropped when the project declares that method as `Promise<void>`, an operation that ends on its
+ * own and returns nothing to release.
+ */
+const EFFECT_CLEANUP_RULE = "effect-needs-cleanup";
 
 /**
  * Reads a file of the project.
@@ -161,7 +204,38 @@ export function isReportedDiagnostic(diagnostic, readSource = () => undefined) {
   if (diagnostic.rule === RAW_SQL_RULE && usesOnlyConstantRawSql(diagnostic.filePath, readSource)) {
     return false;
   }
+  if (isDisprovedBySource(diagnostic, readSource)) {
+    return false;
+  }
   return !EXCLUDED_REACT_DOCTOR_RULES.has(diagnostic.rule);
+}
+
+/**
+ * Checks whether the code at a finding shows that the rule reported valid code, for the rules whose filters read the
+ * finding's position.
+ * @param {ReactDoctorDiagnostic} diagnostic - Finding.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @returns {boolean} Whether the finding is a false positive.
+ */
+function isDisprovedBySource(diagnostic, readSource) {
+  const { filePath, line, column } = diagnostic;
+  switch (diagnostic.rule) {
+    case SET_STATE_AFTER_AWAIT_RULE: {
+      return cancelsBeforeStateWrites(filePath, line, column, readSource);
+    }
+    case LOADING_FLAG_RULE: {
+      return resetsInFinally(filePath, line, column, readSource);
+    }
+    case PROP_CALLBACK_RULE: {
+      return callsOwnStateSetter(filePath, line, column, readSource);
+    }
+    case EFFECT_CLEANUP_RULE: {
+      return callsPromiseMethod(diagnostic, readSource);
+    }
+    default: {
+      return false;
+    }
+  }
 }
 
 /**
