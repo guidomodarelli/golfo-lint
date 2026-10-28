@@ -10,6 +10,7 @@ import {
   stylesCommand,
   unusedCommand,
 } from "./code-analysis.js";
+import { lintCommand } from "./lint.js";
 import { monorepoCommand, packageCommand, secretsCommand, workflowsCommand } from "./project-analysis.js";
 import { reactScanCommand } from "./react-scan.js";
 
@@ -18,6 +19,7 @@ import { reactScanCommand } from "./react-scan.js";
 
 /** @type {Record<string, LintCommand>} */
 const ANALYSIS_COMMANDS = {
+  lint: lintCommand,
   duplicates: duplicatesCommand,
   unused: unusedCommand,
   styles: stylesCommand,

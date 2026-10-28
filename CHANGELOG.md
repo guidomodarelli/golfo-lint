@@ -6,7 +6,7 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ### Added
 
-- Opción `linter: "bun"` para correr el preset con `bun lint`, unas cinco veces más rápido que ESLint (47 s contra 4 a 5 minutos en TuTribu) con los mismos hallazgos: deja afuera `golfo-lint/no-unnecessary-condition`, porque `bun lint` no les da tipos a las reglas de los plugins.
+- `golfo-lint lint` corre el preset con `bun lint` (también dentro de `golfo-lint all`), unas cinco veces más rápido que ESLint (50 s contra 4 a 5 minutos en TuTribu) con los mismos hallazgos. Con la opción `linter: "bun"`, el preset usa la versión nativa de `@typescript-eslint/no-unnecessary-condition`, porque `bun lint` no les da tipos a las reglas de los plugins, y `golfo-lint lint` descarta los reportes que se apoyan en tipos que TypeScript no puede conocer, igual que `golfo-lint/no-unnecessary-condition`.
 - `vitest/valid-expect` acepta el mensaje como segundo argumento de `expect`.
 - `golfo-lint/no-lint-disable` reemplaza a `eslint-comments/no-use`: también rechaza `oxlint-disable`.
 - dependency-cruiser, con `hexagonalModulesPath`: `layers-not-to-setup` impide que una capa importe un `setup.ts`, la raíz de composición.

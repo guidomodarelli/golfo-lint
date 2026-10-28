@@ -70,14 +70,15 @@ describe("createEslintConfig", () => {
     });
   }
 
-  it("con linter bun, deja afuera la regla propia que necesita tipos, que bun lint no le puede dar", async () => {
-    const isOwnTypedRule = (/** @type {{ ruleName: string }} */ { ruleName }) =>
-      ruleName === "golfo-lint/no-unnecessary-condition";
-    const withEslint = await listEnabledRules({ typeChecked: true }, "formatted-badly.ts");
-    const withBun = await listEnabledRules({ typeChecked: true, linter: "bun" }, "formatted-badly.ts");
-    assert.ok(withEslint.some(isOwnTypedRule));
-    assert.deepEqual(withBun.filter(isOwnTypedRule), []);
-    assert.ok(withBun.some(({ ruleName }) => ruleName === "@typescript-eslint/no-floating-promises"));
+  it("con linter bun, cambia la regla propia que necesita tipos por la nativa, que golfo-lint lint filtra", async () => {
+    const ruleNames = async (/** @type {"eslint" | "bun"} */ linter) =>
+      new Set((await listEnabledRules({ typeChecked: true, linter }, "formatted-badly.ts")).map(({ ruleName }) => ruleName));
+    const withEslint = await ruleNames("eslint");
+    const withBun = await ruleNames("bun");
+    assert.ok(withEslint.has("golfo-lint/no-unnecessary-condition"));
+    assert.ok(!withEslint.has("@typescript-eslint/no-unnecessary-condition"));
+    assert.ok(!withBun.has("golfo-lint/no-unnecessary-condition"));
+    assert.ok(withBun.has("@typescript-eslint/no-unnecessary-condition"));
   });
 
   it("apaga las reglas de AWS CDK salvo con awsCdk", async () => {

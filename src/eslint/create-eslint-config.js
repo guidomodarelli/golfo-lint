@@ -171,8 +171,10 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * @property {boolean} [awsCdk] - Whether to enable SonarJS's AWS CDK rules (`sonarjs/aws-*`), which check
  * infrastructure written with `aws-cdk-lib` (default `false`: in other projects they cannot report anything, and
  * they take about a tenth of the lint time).
- * @property {Linter} [linter] - Which linter runs the config: `eslint` (default) or `bun` for `bun lint`, which runs
- * plugin rules in JavaScript without type information and so leaves out `golfo-lint/no-unnecessary-condition`.
+ * @property {Linter} [linter] - Which linter runs the config: `eslint` (default) or `bun` for `golfo-lint lint`, which
+ * runs `bun lint`. `bun lint` gives no types to plugin rules, so with `bun` the native
+ * `@typescript-eslint/no-unnecessary-condition` replaces `golfo-lint/no-unnecessary-condition`, and `golfo-lint lint`
+ * drops its unreliable reports.
  * @property {boolean} [allowDisableComments] - Whether `eslint-disable` comments may silence a rule, as long as
  * they explain why (default `false`: an agent has to fix the code, not silence the linter).
  * @property {string[]} [ignores] - Extra globs to skip, besides dependencies and build output.
@@ -304,9 +306,11 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles, linter }) {
       rules: {
         // Same rule without the reports that rest on narrowing TypeScript cannot keep (a property read again after
         // an `await`) or on array elements typed as always present: see `rules/no-unnecessary-condition.js`.
-        "@typescript-eslint/no-unnecessary-condition": "off",
-        // `bun lint` runs plugin rules in JavaScript without type information, so the rule cannot run there.
-        ...(linter === BUN_LINTER ? {} : { "golfo-lint/no-unnecessary-condition": "error" }),
+        // `bun lint` runs plugin rules without type information, so there the native rule runs, and `golfo-lint lint`
+        // drops the same reports from its output (`src/bun-lint/unnecessary-condition-filter.js`).
+        ...(linter === BUN_LINTER
+          ? { "@typescript-eslint/no-unnecessary-condition": "error" }
+          : { "@typescript-eslint/no-unnecessary-condition": "off", "golfo-lint/no-unnecessary-condition": "error" }),
         // Sorting without a compare function orders numbers and objects as strings. Arrays of strings sort by code
         // unit on purpose (stable ids, canonical keys), where `localeCompare` would make the order depend on the locale.
         "@typescript-eslint/require-array-sort-compare": ["error", { ignoreStringArrays: true }],

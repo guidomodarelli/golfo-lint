@@ -11,7 +11,7 @@ Cuatro decisiones definen el paquete:
 
 | Análisis | Herramienta | Configuración | Comando |
 | --- | --- | --- | --- |
-| Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js, tests | bun lint (o ESLint) | `@golfo/lint/eslint` | `bun lint` |
+| Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js, tests | bun lint (o ESLint) | `@golfo/lint/eslint` | `golfo-lint lint` |
 | CSS y SCSS inválido o frágil | Stylelint | `@golfo/lint/stylelint` | `golfo-lint styles` |
 | React: estado y efectos, rendimiento, seguridad, accesibilidad | react-doctor | — | `golfo-lint react` |
 | Código duplicado | jscpd | `@golfo/lint/jscpd` | `golfo-lint duplicates` |
@@ -48,7 +48,7 @@ Requiere Node.js 22.15 o superior y ESLint 10. Las herramientas de npm vienen co
 
 ## bun lint
 
-Es la forma recomendada de correr el preset: `bun lint` lee el `eslint.config.js` tal cual, corre en nativo las reglas que implementa (las que necesitan tipos, sobre TypeScript 7) y las demás con los plugins de ESLint en JavaScript. Sobre las 200.000 líneas de TuTribu tarda 47 s, contra 4 a 5 minutos de ESLint, con los mismos hallazgos.
+Es la forma recomendada de correr el preset: `golfo-lint lint` corre `bun lint`, que lee el `eslint.config.js` tal cual, corre en nativo las reglas que implementa (las que necesitan tipos, sobre TypeScript 7) y las demás con los plugins de ESLint en JavaScript. Sobre las 200.000 líneas de TuTribu tarda 50 s, contra 4 a 5 minutos de ESLint, con los mismos hallazgos.
 
 ```js
 // eslint.config.js
@@ -58,11 +58,11 @@ export default createEslintConfig({ tsconfigRootDir: import.meta.dirname, linter
 ```
 
 ```json
-{ "scripts": { "lint": "bun lint --no-script --type-aware" } }
+{ "scripts": { "lint": "golfo-lint lint" } }
 ```
 
-- `--no-script` hace falta porque `bun lint` corre el script `lint` del proyecto si existe, que sería él mismo.
-- `linter: "bun"` deja afuera `golfo-lint/no-unnecessary-condition`: `bun lint` corre en JavaScript las reglas de los plugins y no les da tipos, y la versión de typescript-eslint trae los falsos positivos que esa regla evita.
+- `golfo-lint lint` corre `bun lint --no-script --type-aware` (y le pasa los argumentos que reciba, como `--fix` o una lista de archivos). `--no-script` evita que `bun lint` vuelva a correr el script `lint` del proyecto. `golfo-lint all` también lo corre.
+- `bun lint` no les da tipos a las reglas de los plugins, así que `golfo-lint/no-unnecessary-condition` no puede correr. Con `linter: "bun"`, el preset prende la versión nativa de `@typescript-eslint/no-unnecessary-condition`, y `golfo-lint lint` descarta de su salida los reportes que se apoyan en tipos que TypeScript no puede conocer, mirando solo el código: una propiedad que la misma función ya chequeó (un `await` o una llamada pueden cambiarla), un `let` que otra función reasigna y que la función achicó antes, una API del entorno (`globalThis.crypto?.randomUUID`) y, sin `noUncheckedIndexedAccess`, un elemento leído por índice. Sobre TuTribu deja 182 de los 183 reportes de la regla propia y ninguno de más; el que pierde es un chequeo sobre una unión discriminada, que sin tipos se ve igual que un flag que cambia. Correr `bun lint` directo, sin `golfo-lint lint`, muestra también los reportes que el filtro descarta.
 - Las reglas con tipos usan, para cada archivo, el `tsconfig.json` más cercano. Si el `tsconfig.json` raíz excluye los tests, sumá uno en la carpeta de tests (por ejemplo `tests/tsconfig.json` con `"extends": "../tsconfig.test.json"` y `"include": ["**/*.ts", "**/*.tsx"]`); si no, sus tipos son `any` y aparecen cientos de falsos reportes.
 - `bun lint` todavía está solo en las versiones canary de Bun (`bun upgrade --canary`, o `bun-version: canary` en `oven-sh/setup-bun`), hasta Bun 1.4.5.
 
@@ -88,7 +88,7 @@ export default createEslintConfig({
 | `react` | `false` | Hooks de React, accesibilidad en JSX y `useEffect` innecesarios. |
 | `next` | `false` | Reglas de Next.js, Core Web Vitals incluidas. |
 | `vitest` | `false` | En los tests: sin `.only` ni `.skip`, sin tests sin asserts, `expect` válidos. |
-| `linter` | `eslint` | `bun` para correrlo con `bun lint`: deja afuera `golfo-lint/no-unnecessary-condition`, que necesita tipos. |
+| `linter` | `eslint` | `bun` para correrlo con `golfo-lint lint`: cambia `golfo-lint/no-unnecessary-condition`, que necesita tipos, por la regla nativa, que `golfo-lint lint` filtra. |
 | `awsCdk` | `false` | Reglas `sonarjs/aws-*`, que revisan infraestructura escrita con `aws-cdk-lib`. Sin AWS CDK no pueden reportar nada y se llevan cerca de una décima parte del tiempo del lint. |
 | `allowDisableComments` | `false` | Permite `eslint-disable`, siempre con una explicación. |
 | `ignores` | `[]` | Globs extra a ignorar, además de dependencias y build. |
