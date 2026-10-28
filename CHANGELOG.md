@@ -4,6 +4,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
 ### Added
 
 - Con `react`, el preset apaga reglas cuyos reportes en TuTribu eran todos código correcto: `react-you-might-not-need-an-effect/no-event-handler` y `no-pass-data-to-parent` (efectos que sincronizan la URL, un store externo, el reloj o el foco), `jsx-a11y-x/no-autofocus` (el foco que pasa al paso siguiente cuando desaparece el control que lo abrió) y `unicorn/no-document-cookie` (la Cookie Store API llegó a Safari 18.4 y Firefox 140). `jsx-a11y-x/no-noninteractive-tabindex` acepta `role="region"`, porque una región con scroll tiene que poder enfocarse (WCAG 2.1.1).
