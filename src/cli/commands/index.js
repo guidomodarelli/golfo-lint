@@ -10,6 +10,7 @@ import {
   stylesCommand,
   unusedCommand,
 } from "./code-analysis.js";
+import { lintCommand } from "./lint.js";
 import { monorepoCommand, packageCommand, secretsCommand, workflowsCommand } from "./project-analysis.js";
 import { reactScanCommand } from "./react-scan.js";
 
@@ -18,6 +19,7 @@ import { reactScanCommand } from "./react-scan.js";
 
 /** @type {Record<string, LintCommand>} */
 const ANALYSIS_COMMANDS = {
+  lint: lintCommand,
   duplicates: duplicatesCommand,
   unused: unusedCommand,
   styles: stylesCommand,
@@ -37,7 +39,7 @@ const ANALYSIS_COMMANDS = {
  * @returns {Promise<number>} Exit code.
  */
 export async function runApplicableCommand(commandName, command, context) {
-  const skipReason = command.skipReason?.(context.cwd);
+  const skipReason = command.skipReason?.(context.cwd, context.toolArguments);
   if (skipReason !== undefined) {
     context.log(`golfo-lint ${commandName}: no aplica (${skipReason}).`);
     return 0;

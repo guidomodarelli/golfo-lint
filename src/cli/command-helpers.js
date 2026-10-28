@@ -21,8 +21,8 @@ import { DEFAULT_ANALYZED_PATH, EXIT_CODE_TOOL_UNAVAILABLE } from "./constants.j
 /**
  * @typedef {object} LintCommand
  * @property {string} description - One-line summary for the usage message.
- * @property {(cwd: string) => string | undefined} [skipReason] - Why the check does not apply to a project, or
- * `undefined` when it does.
+ * @property {(cwd: string, toolArguments: string[]) => string | undefined} [skipReason] - Why the check does not apply
+ * to a project, given the arguments passed to the tool, or `undefined` when it does.
  * @property {(context: CommandContext) => Promise<number>} run - Runs the check and returns its exit code.
  */
 

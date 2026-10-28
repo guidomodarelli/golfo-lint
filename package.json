@@ -67,7 +67,7 @@
     "node": ">=22.15"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "node bin/golfo-lint.js lint",
     "test": "node --test \"test/**/*.test.js\"",
     "typecheck": "bun check -p tsconfig.json",
     "pack:check": "npm pack --dry-run",

@@ -70,6 +70,17 @@ describe("createEslintConfig", () => {
     });
   }
 
+  it("con linter bun, cambia la regla propia que necesita tipos por la nativa, que golfo-lint lint filtra", async () => {
+    const ruleNames = async (/** @type {"eslint" | "bun"} */ linter) =>
+      new Set((await listEnabledRules({ typeChecked: true, linter }, "formatted-badly.ts")).map(({ ruleName }) => ruleName));
+    const withEslint = await ruleNames("eslint");
+    const withBun = await ruleNames("bun");
+    assert.ok(withEslint.has("golfo-lint/no-unnecessary-condition"));
+    assert.ok(!withEslint.has("@typescript-eslint/no-unnecessary-condition"));
+    assert.ok(!withBun.has("golfo-lint/no-unnecessary-condition"));
+    assert.ok(withBun.has("@typescript-eslint/no-unnecessary-condition"));
+  });
+
   it("apaga las reglas de AWS CDK salvo con awsCdk", async () => {
     const isAwsCdkRule = (/** @type {{ ruleName: string }} */ { ruleName }) => ruleName.startsWith("sonarjs/aws-");
     const withoutAwsCdk = await listEnabledRules({ typeChecked: false }, "snippet.js");
@@ -253,9 +264,66 @@ describe("createEslintConfig", () => {
     );
   });
 
-  it("no deja silenciar reglas con comentarios", async () => {
-    const ruleIds = await lintSnippet(DISABLED_RULE_SNIPPET);
-    assert.ok(ruleIds.includes("eslint-comments/no-use"));
+  it("no deja silenciar reglas con comentarios de ESLint ni de oxlint", async () => {
+    for (const snippet of [
+      DISABLED_RULE_SNIPPET,
+      DISABLED_RULE_SNIPPET.replace("eslint-disable", "oxlint-disable"),
+      '/* eslint eqeqeq: "off" */\nexport const isZero = (value) => value == 0;\n',
+      '/* eslint "eqeqeq": "off" */\nexport const isZero = (value) => value == 0;\n',
+      "/* global missingFunction: readonly */\nexport const value = missingFunction();\n",
+      "/* exported unused */\nexport const total = 1;\n",
+      "/* eslint-env browser */\nexport const total = 1;\n",
+    ]) {
+      const ruleIds = await lintSnippet(snippet);
+      assert.ok(ruleIds.includes("golfo-lint/no-lint-disable"), `${snippet}: ${ruleIds.join(", ")}`);
+    }
+  });
+
+  it("deja descartar propiedades con un resto y marcar con _ los parámetros que no se leen", async () => {
+    const snippet = [
+      "export const withoutPassword = (row) => {",
+      "  const { password: _password, ...user } = row;",
+      "  return user;",
+      "};",
+      "export const respond = (..._args) => 1;",
+      "export const [, second] = [1, 2];",
+      "",
+    ].join("\n");
+    const ruleIds = await lintSnippet(snippet);
+    assert.ok(!ruleIds.some((ruleId) => ruleId.endsWith("no-unused-vars")), ruleIds.join(", "));
+  });
+
+  it("con React apaga las reglas que reportan código correcto y deja tabIndex en una región", async () => {
+    const config = await createLinter({ typeChecked: false, react: true }).calculateConfigForFile(
+      path.join(TYPED_FIXTURE_DIRECTORY, "component.jsx"),
+    );
+    for (const ruleName of [
+      "react-you-might-not-need-an-effect/no-event-handler",
+      "react-you-might-not-need-an-effect/no-pass-data-to-parent",
+      "jsx-a11y-x/no-autofocus",
+      "unicorn/no-document-cookie",
+    ]) {
+      assert.equal(config.rules?.[ruleName]?.[0], 0, ruleName);
+    }
+    assert.deepEqual(config.rules?.["jsx-a11y-x/no-noninteractive-tabindex"]?.[1]?.roles, ["tabpanel", "region"]);
+    assert.equal(config.rules?.["react-you-might-not-need-an-effect/no-derived-state"]?.[0], 2);
+  });
+
+  it("trata los configs con punto como archivos de config", async () => {
+    const config = await createLinter({ typeChecked: false }).calculateConfigForFile(
+      path.join(TYPED_FIXTURE_DIRECTORY, ".dependency-cruiser.mjs"),
+    );
+    assert.equal(config.rules?.["unicorn/no-top-level-side-effects"]?.[0], 0);
+  });
+
+  it("no confunde un comentario que menciona eslint con una directiva", async () => {
+    for (const snippet of [
+      "// The eslint-disable comments are not allowed here.\nexport const total = 1;\n",
+      "// eslint reports this import as unused when the type goes away.\nexport const total = 1;\n",
+      "/* oxlint runs before the tests. */\nexport const total = 1;\n",
+    ]) {
+      assert.deepEqual(await lintSnippet(snippet), [], snippet);
+    }
   });
 
   it("con allowDisableComments, exige explicar por qué se silencia una regla", async () => {

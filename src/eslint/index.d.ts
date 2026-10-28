@@ -23,6 +23,12 @@ export interface EslintConfigOptions {
    * `aws-cdk-lib` (default `false`).
    */
   awsCdk?: boolean;
+  /**
+   * Which linter runs the config: `eslint` (default) or `bun` for `golfo-lint lint`, which runs `bun lint`. With `bun`
+   * the native `@typescript-eslint/no-unnecessary-condition` replaces `golfo-lint/no-unnecessary-condition`, and
+   * `golfo-lint lint` drops its reports that rest on types TypeScript cannot know.
+   */
+  linter?: "eslint" | "bun";
   /** Whether `eslint-disable` comments may silence a rule, with a description (default `false`). */
   allowDisableComments?: boolean;
   /** Extra globs to skip, besides dependencies and build output. */

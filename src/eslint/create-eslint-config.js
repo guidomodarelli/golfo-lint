@@ -30,8 +30,31 @@ import {
   TEST_FILE_GLOBS,
 } from "../shared/thresholds.js";
 import { DUPLICATED_RULES, listFormattingRules, NON_DEFECT_RULES, turnOffRules } from "./formatting-rules.js";
-import { noUnnecessaryCondition } from "./rules/no-unnecessary-condition.js";
+/** Plugin with the rules golfo-lint writes itself, under the `golfo-lint/` prefix. */
+import GOLFO_LINT_PLUGIN from "./plugin.js";
 
+
+/** @typedef {"eslint" | "bun"} Linter */
+
+/** `bun lint`, which reads this ESLint config and runs the rules natively or as JavaScript plugins. */
+const BUN_LINTER = "bun";
+
+/**
+ * SonarJS rules the preset enables, besides `sonarjs/cognitive-complexity`: the ones that found real defects on
+ * TuTribu (200,000 lines). The rest of its `recommended` set found nothing there, repeated TypeScript or another
+ * rule, or only chose a spelling; under oxlint each one runs as a JS rule and costs time on every file.
+ */
+const SONARJS_RULES = [
+  "sonarjs/no-identical-functions",
+  "sonarjs/super-linear-regex",
+  "sonarjs/regex-complexity",
+  "sonarjs/no-nested-assignment",
+  "sonarjs/no-same-line-conditional",
+  "sonarjs/no-unused-collection",
+  "sonarjs/no-misleading-array-reverse",
+  "sonarjs/no-globals-shadowing",
+  "sonarjs/no-fixed-wait-in-tests",
+];
 
 /** Prefix of SonarJS's rules for AWS CDK infrastructure code (`sonarjs/aws-s3-bucket-public-access`, ...). */
 const AWS_CDK_RULE_PREFIX = "aws-";
@@ -41,10 +64,9 @@ const AWS_CDK_RULE_PREFIX = "aws-";
 const TYPESCRIPT_FILE_GLOBS = ["**/*.{ts,tsx,mts,cts}"];
 
 /** Tool config files, whose job is the top-level side effect of exporting a computed config. */
-const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}"];
+/** Tool config files, which build their config at the top level: `next.config.ts`, `.dependency-cruiser.mjs`. */
+const CONFIG_FILE_GLOBS = ["**/*.config.{js,mjs,cjs,ts,mts,cts}", "**/.*.{js,mjs,cjs,ts,mts,cts}"];
 
-/** Plugin with the rules golfo-lint writes itself, under the `golfo-lint/` prefix. */
-const GOLFO_LINT_PLUGIN = { rules: { "no-unnecessary-condition": noUnnecessaryCondition } };
 
 /** Root TypeScript config of a project. */
 const ROOT_TSCONFIG_FILE = "tsconfig.json";
@@ -150,6 +172,10 @@ const PLUGINS_BY_PREFIX = /** @type {never} */ ({
  * @property {boolean} [awsCdk] - Whether to enable SonarJS's AWS CDK rules (`sonarjs/aws-*`), which check
  * infrastructure written with `aws-cdk-lib` (default `false`: in other projects they cannot report anything, and
  * they take about a tenth of the lint time).
+ * @property {Linter} [linter] - Which linter runs the config: `eslint` (default) or `bun` for `golfo-lint lint`, which
+ * runs `bun lint`. `bun lint` gives no types to plugin rules, so with `bun` the native
+ * `@typescript-eslint/no-unnecessary-condition` replaces `golfo-lint/no-unnecessary-condition`, and `golfo-lint lint`
+ * drops its unreliable reports.
  * @property {boolean} [allowDisableComments] - Whether `eslint-disable` comments may silence a rule, as long as
  * they explain why (default `false`: an agent has to fix the code, not silence the linter).
  * @property {string[]} [ignores] - Extra globs to skip, besides dependencies and build output.
@@ -169,7 +195,16 @@ function createCoreRules() {
     "default-case-last": "error",
     // `== null` matches `null` and `undefined` on purpose; every other loose comparison is reported.
     eqeqeq: ["error", "always", { null: "ignore" }],
-    "id-length": ["error", { min: MIN_IDENTIFIER_LENGTH, exceptions: SHORT_IDENTIFIER_EXCEPTIONS, properties: "never" }],
+    // One uppercase letter is a type parameter (`<T>`), the usual name for it; oxlint checks them, ESLint does not.
+    "id-length": [
+      "error",
+      {
+        min: MIN_IDENTIFIER_LENGTH,
+        exceptions: SHORT_IDENTIFIER_EXCEPTIONS,
+        exceptionPatterns: ["^[A-Z]$"],
+        properties: "never",
+      },
+    ],
     "max-depth": ["error", MAX_NESTING_DEPTH],
     "max-lines-per-function": ["error", { max: MAX_FUNCTION_LINES, skipBlankLines: true, skipComments: true }],
     "max-nested-callbacks": ["error", MAX_NESTED_CALLBACKS],
@@ -199,6 +234,12 @@ function createCoreRules() {
 function createPluginRules() {
   return {
     "@typescript-eslint/max-params": ["error", { max: MAX_FUNCTION_PARAMETERS }],
+    // `const { password: _password, ...user } = row` drops a property on purpose, and a `_` prefix marks a parameter a
+    // signature needs but the body does not read (`vi.fn(async (..._args: unknown[]) => response)`).
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { ignoreRestSiblings: true, argsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+    ],
     "@typescript-eslint/no-magic-numbers": [
       "error",
       {
@@ -209,6 +250,8 @@ function createPluginRules() {
         ignoreNumericLiteralTypes: true,
         ignoreReadonlyClassProperties: true,
         ignoreTypeIndexes: true,
+        // A number in a `let` can change on the next line: only a `const` gives it a fixed meaning.
+        enforceConst: true,
       },
     ],
     // Inline `type` specifiers (`import { value, type Shape }`): merging a separate `import type { ... }` into an
@@ -253,11 +296,12 @@ function detectTsconfigFiles(tsconfigRootDir) {
 
 /**
  * Type-aware rules for TypeScript files, beyond `strictTypeChecked`.
- * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] | undefined }} typescriptProject - Where the
- * TypeScript configs are, and which ones to load (`undefined`: detect them; none: the project service finds them).
+ * @param {{ tsconfigRootDir: string; tsconfigFiles: string[] | undefined; linter: Linter }} typescriptProject -
+ * Where the TypeScript configs are, which ones to load (`undefined`: detect them; none: the project service finds
+ * them), and which linter runs the config.
  * @returns {FlatConfig[]} Config objects.
  */
-function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
+function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles, linter }) {
   const configFiles = tsconfigFiles ?? detectTsconfigFiles(tsconfigRootDir);
   const projectOptions = configFiles.length > 0 ? { project: configFiles } : { projectService: true };
   return [
@@ -269,8 +313,11 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
       rules: {
         // Same rule without the reports that rest on narrowing TypeScript cannot keep (a property read again after
         // an `await`) or on array elements typed as always present: see `rules/no-unnecessary-condition.js`.
-        "@typescript-eslint/no-unnecessary-condition": "off",
-        "golfo-lint/no-unnecessary-condition": "error",
+        // `bun lint` runs plugin rules without type information, so there the native rule runs, and `golfo-lint lint`
+        // drops the same reports from its output (`src/bun-lint/unnecessary-condition-filter.js`).
+        ...(linter === BUN_LINTER
+          ? { "@typescript-eslint/no-unnecessary-condition": "error" }
+          : { "@typescript-eslint/no-unnecessary-condition": "off", "golfo-lint/no-unnecessary-condition": "error" }),
         // Sorting without a compare function orders numbers and objects as strings. Arrays of strings sort by code
         // unit on purpose (stable ids, canonical keys), where `localeCompare` would make the order depend on the locale.
         "@typescript-eslint/require-array-sort-compare": ["error", { ignoreStringArrays: true }],
@@ -280,8 +327,6 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // TypeScript and typed rules report these with the types: extra arguments are a compile error, and
         // comparisons that are always true or false go to `golfo-lint/no-unnecessary-condition`, which knows when the
         // types can be trusted; `@typescript-eslint/no-unnecessary-type-conversion` reports the same coercions.
-        "sonarjs/different-types-comparison": "off",
-        "sonarjs/no-extra-arguments": "off",
         "unicorn/no-useless-coercion": "off",
         // `switch-exhaustiveness-check` asks for every member of a union, also the one that shares the `default`
         // branch (`case "forbidden": default:`); this rule asks to delete that case, so the two contradict.
@@ -295,7 +340,6 @@ function createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) {
         // `import { type A, type B }` keeps an empty side-effect import under `verbatimModuleSyntax`: when every
         // specifier is a type, `import type { A, B }`.
         "@typescript-eslint/no-import-type-side-effects": "error",
-        "@typescript-eslint/prefer-nullish-coalescing": "error",
         "@typescript-eslint/prefer-optional-chain": "error",
         "@typescript-eslint/switch-exhaustiveness-check": "error",
         "@typescript-eslint/only-throw-error": "error",
@@ -341,14 +385,14 @@ function promoteWarningsToErrors(configs) {
 }
 
 /**
- * Rules about `eslint-disable` and other directive comments.
+ * Rules about `eslint-disable`, `oxlint-disable` and other directive comments.
  * @param {boolean} allowDisableComments - Whether directive comments may silence rules.
  * @returns {FlatConfig} Config object.
  */
 function createDirectiveCommentsConfig(allowDisableComments) {
   return {
     name: "golfo-lint/directive-comments",
-    plugins: { "eslint-comments": eslintComments },
+    plugins: { "eslint-comments": eslintComments, "golfo-lint": GOLFO_LINT_PLUGIN },
     linterOptions: { reportUnusedDisableDirectives: "error", reportUnusedInlineConfigs: "error" },
     rules: allowDisableComments
       ? {
@@ -356,9 +400,36 @@ function createDirectiveCommentsConfig(allowDisableComments) {
           "eslint-comments/require-description": "error",
           "eslint-comments/disable-enable-pair": "error",
         }
-      : { "eslint-comments/no-use": ["error", { allow: [] }] },
+      : // Also the `oxlint-disable` spelling, which oxlint honors as well and `eslint-comments` does not see.
+        { "golfo-lint/no-lint-disable": "error" },
   };
 }
+
+/**
+ * React rules whose recommended options report sound code. In TuTribu every report of the rules turned off here was
+ * correct code:
+ * - `no-event-handler` and `no-pass-data-to-parent` read any effect guarded by a prop or that calls a callback as an
+ *   event handler, including the ones that sync with the URL, an external store, the clock or move the focus after a
+ *   render.
+ * - `no-autofocus` targets focus stolen on page load, but cannot tell it from the focus a step moves when the control
+ *   that opened it disappears, which is what keeps keyboard users in place.
+ * - `unicorn/no-document-cookie` asks for the Cookie Store API, which Safari ships since 18.4 and Firefox since 140.
+ * And `jsx-a11y` accepts `tabIndex` on a `region`: a scrollable region must be focusable (WCAG 2.1.1).
+ * @type {FlatConfig}
+ */
+const REACT_TUNING = {
+  name: "golfo-lint/react-tuning",
+  rules: {
+    "react-you-might-not-need-an-effect/no-event-handler": "off",
+    "react-you-might-not-need-an-effect/no-pass-data-to-parent": "off",
+    "jsx-a11y-x/no-autofocus": "off",
+    "unicorn/no-document-cookie": "off",
+    "jsx-a11y-x/no-noninteractive-tabindex": [
+      "error",
+      { tags: [], roles: ["tabpanel", "region"], allowExpressionValues: true },
+    ],
+  },
+};
 
 /**
  * Rules for the frameworks a project declares.
@@ -368,7 +439,7 @@ function createDirectiveCommentsConfig(allowDisableComments) {
 function createFrameworkConfigs(frameworks) {
   return [
     ...(frameworks.react
-      ? [reactHooks.configs.flat.recommended, jsxA11y.configs.recommended, reactEffects.configs.strict]
+      ? [reactHooks.configs.flat.recommended, jsxA11y.configs.recommended, reactEffects.configs.strict, REACT_TUNING]
       : []),
     ...(frameworks.next ? [nextPlugin.configs["core-web-vitals"]] : []),
     ...(frameworks.vitest && frameworks.testFiles.length > 0
@@ -379,10 +450,10 @@ function createFrameworkConfigs(frameworks) {
             rules: {
               ...vitestPlugin.configs.recommended.rules,
               "vitest/no-standalone-expect": "error",
-              // `vitest/expect-expect` reports the same tests without assertions.
-              "sonarjs/assertions-in-tests": "off",
               "vitest/require-to-throw-message": "error",
               "vitest/valid-title": "error",
+              // Vitest's `expect(value, message)` takes the message that explains a failure.
+              "vitest/valid-expect": ["error", { maxArgs: 2 }],
             },
           }),
         ]
@@ -411,11 +482,30 @@ function createTestFilesConfig(testFiles) {
       "@typescript-eslint/no-magic-numbers": "off",
       "max-lines-per-function": "off",
       "max-nested-callbacks": "off",
-      "sonarjs/no-duplicate-string": "off",
+      // Helpers that build fixtures take every value of the case, and a test's branches follow the cases it lists.
+      "@typescript-eslint/max-params": "off",
+      "sonarjs/cognitive-complexity": "off",
+      // `String(init?.body)` reads the body a test sent through a mocked `fetch`, typed as `BodyInit`.
+      "@typescript-eslint/no-base-to-string": "off",
+      // Tests rethrow what they caught, throw `null` to test how code handles it, and drop the `cause` of an error on
+      // purpose so private data stays out of the test output.
+      "@typescript-eslint/only-throw-error": "off",
+      "preserve-caught-error": "off",
+      // Playwright's `locator.innerText()` is not the DOM property.
+      "unicorn/prefer-dom-node-text-content": "off",
       // Tests replace `window` and `navigator` properties to simulate the browser.
       "unicorn/no-global-object-property-assignment": "off",
     },
   };
+}
+
+/**
+ * Turns rules on as errors.
+ * @param {string[]} ruleNames - Fully qualified rule names.
+ * @returns {Record<string, "error">} Rule entries.
+ */
+function turnOnRules(ruleNames) {
+  return Object.fromEntries(ruleNames.map((ruleName) => [ruleName, "error"]));
 }
 
 /**
@@ -445,6 +535,7 @@ export function createEslintConfig(options = {}) {
     next: false,
     vitest: false,
     awsCdk: false,
+    linter: "eslint",
     allowDisableComments: false,
     ignores: [],
     testFiles: TEST_FILE_GLOBS,
@@ -457,6 +548,7 @@ export function createEslintConfig(options = {}) {
     next,
     vitest,
     awsCdk,
+    linter,
     allowDisableComments,
     ignores,
     testFiles,
@@ -472,10 +564,14 @@ export function createEslintConfig(options = {}) {
     importX.flatConfigs.typescript,
     promisePlugin.configs["flat/recommended"],
     regexpPlugin.configs["flat/recommended"],
-    sonarjs.configs.recommended,
+    {
+      name: "golfo-lint/sonarjs",
+      plugins: { sonarjs },
+      rules: turnOnRules(awsCdk ? [...SONARJS_RULES, ...listAwsCdkRules()] : SONARJS_RULES),
+    },
     // `unopinionated` leaves out unicorn's style preferences; only rules about behavior and APIs remain.
     unicorn.configs.unopinionated,
-    ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles }) : []),
+    ...(typeChecked ? createTypeCheckedConfigs({ tsconfigRootDir, tsconfigFiles, linter }) : []),
     ...createFrameworkConfigs({ react, next, vitest, testFiles }),
     {
       name: "golfo-lint/quality",
@@ -490,6 +586,5 @@ export function createEslintConfig(options = {}) {
     { name: "golfo-lint/no-formatting", rules: turnOffRules(listFormattingRules(PLUGINS_BY_PREFIX)) },
     { name: "golfo-lint/no-duplicates", rules: turnOffRules(DUPLICATED_RULES) },
     { name: "golfo-lint/no-false-alarms", rules: turnOffRules(NON_DEFECT_RULES) },
-    ...(awsCdk ? [] : [{ name: "golfo-lint/no-aws-cdk", rules: turnOffRules(listAwsCdkRules()) }]),
   ]);
 }

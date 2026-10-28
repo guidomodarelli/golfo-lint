@@ -11,7 +11,7 @@ Cuatro decisiones definen el paquete:
 
 | Análisis | Herramienta | Configuración | Comando |
 | --- | --- | --- | --- |
-| Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js, tests | ESLint | `@golfo/lint/eslint` | `eslint .` |
+| Bugs, código confuso, complejidad, nombres, accesibilidad, React, Next.js, tests | bun lint (o ESLint) | `@golfo/lint/eslint` | `golfo-lint lint` |
 | CSS y SCSS inválido o frágil | Stylelint | `@golfo/lint/stylelint` | `golfo-lint styles` |
 | React: estado y efectos, rendimiento, seguridad, accesibilidad | react-doctor | — | `golfo-lint react` |
 | Código duplicado | jscpd | `@golfo/lint/jscpd` | `golfo-lint duplicates` |
@@ -46,6 +46,26 @@ allowBuilds:
 
 Requiere Node.js 22.15 o superior y ESLint 10. Las herramientas de npm vienen como dependencias, todas en versiones exactas: una versión nueva de un plugin puede sumar reglas que hagan fallar un proyecto que hoy pasa, así que se actualizan a propósito y validadas. actionlint y zizmor se distribuyen como paquetes de Python: `golfo-lint` los ejecuta con `uvx` en versiones fijas, así que basta con tener [uv](https://docs.astral.sh/uv/). gitleaks es un binario de Go que hay que instalar (`winget install Gitleaks.Gitleaks`, `brew install gitleaks` o desde sus [releases](https://github.com/gitleaks/gitleaks/releases)).
 
+## bun lint
+
+Es la forma recomendada de correr el preset: `golfo-lint lint` corre `bun lint`, que lee el `eslint.config.js` tal cual, corre en nativo las reglas que implementa (las que necesitan tipos, sobre TypeScript 7) y las demás con los plugins de ESLint en JavaScript. Sobre las 200.000 líneas de TuTribu tarda 50 s, contra 4 a 5 minutos de ESLint, con los mismos hallazgos.
+
+```js
+// eslint.config.js
+import { createEslintConfig } from "@golfo/lint/eslint";
+
+export default createEslintConfig({ tsconfigRootDir: import.meta.dirname, linter: "bun", react: true, next: true, vitest: true });
+```
+
+```json
+{ "scripts": { "lint": "golfo-lint lint" } }
+```
+
+- `golfo-lint lint` corre `bun lint --no-script --type-aware` (y le pasa los argumentos que reciba, como `--fix` o una lista de archivos). `--no-script` evita que `bun lint` vuelva a correr el script `lint` del proyecto. `golfo-lint all` también lo corre.
+- `bun lint` no les da tipos a las reglas de los plugins, así que `golfo-lint/no-unnecessary-condition` no puede correr. Con `linter: "bun"`, el preset prende la versión nativa de `@typescript-eslint/no-unnecessary-condition`, y `golfo-lint lint` descarta de su salida los reportes que se apoyan en tipos que TypeScript no puede conocer, mirando solo el código: una propiedad que la misma función ya chequeó (un `await` o una llamada pueden cambiarla), un `let` que otra función reasigna y que la función achicó antes, una API del entorno (`globalThis.crypto?.randomUUID`) y, sin `noUncheckedIndexedAccess`, un elemento leído por índice. Sobre TuTribu deja 182 de los 183 reportes de la regla propia y ninguno de más; el que pierde es un chequeo sobre una unión discriminada, que sin tipos se ve igual que un flag que cambia. Correr `bun lint` directo, sin `golfo-lint lint`, muestra también los reportes que el filtro descarta.
+- Las reglas con tipos usan, para cada archivo, el `tsconfig.json` más cercano. Si el `tsconfig.json` raíz excluye los tests, sumá uno en la carpeta de tests (por ejemplo `tests/tsconfig.json` con `"extends": "../tsconfig.test.json"` y `"include": ["**/*.ts", "**/*.tsx"]`); si no, sus tipos son `any` y aparecen cientos de falsos reportes.
+- `bun lint` todavía está solo en las versiones canary de Bun (`bun upgrade --canary`, o `bun-version: canary` en `oven-sh/setup-bun`), hasta Bun 1.4.5.
+
 ## ESLint
 
 ```js
@@ -68,6 +88,7 @@ export default createEslintConfig({
 | `react` | `false` | Hooks de React, accesibilidad en JSX y `useEffect` innecesarios. |
 | `next` | `false` | Reglas de Next.js, Core Web Vitals incluidas. |
 | `vitest` | `false` | En los tests: sin `.only` ni `.skip`, sin tests sin asserts, `expect` válidos. |
+| `linter` | `eslint` | `bun` para correrlo con `golfo-lint lint`: cambia `golfo-lint/no-unnecessary-condition`, que necesita tipos, por la regla nativa, que `golfo-lint lint` filtra. |
 | `awsCdk` | `false` | Reglas `sonarjs/aws-*`, que revisan infraestructura escrita con `aws-cdk-lib`. Sin AWS CDK no pueden reportar nada y se llevan cerca de una décima parte del tiempo del lint. |
 | `allowDisableComments` | `false` | Permite `eslint-disable`, siempre con una explicación. |
 | `ignores` | `[]` | Globs extra a ignorar, además de dependencias y build. |
@@ -76,28 +97,28 @@ export default createEslintConfig({
 Qué incluye:
 
 - **ESLint core** `recommended` más reglas como `eqeqeq` (salvo `== null`, que cubre `null` y `undefined` a propósito), `no-param-reassign`, `no-implicit-coercion`, `no-nested-ternary`, `id-length` y límites de largo, profundidad y callbacks anidados.
-- **typescript-eslint** `strictTypeChecked`, más `switch-exhaustiveness-check`, `prefer-nullish-coalescing`, `consistent-type-imports`, `no-magic-numbers` y `require-array-sort-compare` (los arrays de strings pueden ordenarse sin función: ids y claves canónicas se ordenan por código a propósito, y `localeCompare` haría depender el orden del idioma).
+- **typescript-eslint** `strictTypeChecked`, más `switch-exhaustiveness-check`, `consistent-type-imports`, `no-magic-numbers` y `require-array-sort-compare` (los arrays de strings pueden ordenarse sin función: ids y claves canónicas se ordenan por código a propósito, y `localeCompare` haría depender el orden del idioma).
 - **`golfo-lint/no-unnecessary-condition`** en lugar de `@typescript-eslint/no-unnecessary-condition`: la misma regla sin los reportes que se apoyan en tipos que TypeScript no puede conocer. TypeScript sigue considerando estrechada una propiedad después de un `await` o de una llamada, aunque pueda haber cambiado (`if (signal.aborted) return; await fetch(...); if (signal.aborted) ...`); sin `noUncheckedIndexedAccess`, un elemento de un array o una entrada de un record (`items[0]`, `countsById[id]`) parece siempre presente; un `let` que reasigna un callback o una función de limpieza conserva el tipo estrechado, porque TypeScript no sigue las asignaciones hechas en otra función (`let isCurrent = true` y `isCurrent = false` en el cleanup de un efecto); y las APIs del entorno parecen estar siempre, aunque falten en el servidor, en runtimes viejos o fuera de un contexto seguro (`globalThis.crypto?.randomUUID`, `if (!Element.prototype.scrollIntoView)` antes de un polyfill). Un agente que sigue esos reportes borra un chequeo que el código necesita.
-- **SonarJS** `recommended`, con complejidad cognitiva máxima de 15. Es la única medida de complejidad: cuenta lo que hace difícil leer una función (anidamiento, cortes del flujo) y no cada `case` de un `switch` plano, así que la complejidad ciclomática de ESLint (`complexity`) no se usa.
+- **SonarJS**: complejidad cognitiva máxima de 15, más las reglas que encontraron defectos reales en TuTribu (funciones idénticas, expresiones regulares con backtracking o demasiado complejas, asignaciones anidadas, colecciones que nunca se leen, `reverse()` que muta, esperas fijas en tests, entre otras). El resto de su `recommended` no encontró nada en 200.000 líneas, repetía a TypeScript u otra regla, o solo elegía una forma de escribir; con `bun lint` cada regla de SonarJS corre en JavaScript y cuesta tiempo en cada archivo. La complejidad cognitiva es la única medida de complejidad: cuenta lo que hace difícil leer una función (anidamiento, cortes del flujo) y no cada `case` de un `switch` plano, así que la complejidad ciclomática de ESLint (`complexity`) no se usa.
 - **unicorn** `unopinionated`, más `catch-error-name` (el error del `catch` se llama `error`) y `name-replacements` con una lista propia que solo expande abreviaturas (`err`, `msg`, `btn`, `ctx`...). Los reemplazos de unicorn quedan apagados porque también abrevian (`application` por `app`).
 - **import-x**: imports duplicados, exports mutables, auto-imports y rutas inútiles. Las reglas que repiten lo que TypeScript ya verifica (`named`, `default`, `namespace`, `no-unresolved`) quedan apagadas, y los ciclos los revisa `golfo-lint architecture` para todo el repositorio, mucho más rápido.
 - **promise** y **regexp** `recommended`.
-- **eslint-comments**: prohíbe los comentarios que apagan reglas.
+- **`golfo-lint/no-lint-disable`**: prohíbe los comentarios que apagan o reconfiguran reglas, tanto `eslint-disable` como `oxlint-disable`. Con `allowDisableComments`, **eslint-comments** exige que expliquen por qué.
 - Con `react`: **react-hooks**, **jsx-a11y** (el fork `eslint-plugin-jsx-a11y-x`, porque el original todavía no soporta ESLint 10) y **react-you-might-not-need-an-effect**.
 - Con `next`: **@next/eslint-plugin-next** `core-web-vitals`.
 - Con `vitest`: **@vitest/eslint-plugin** `recommended`, más `no-standalone-expect`, `require-to-throw-message` y `valid-title`.
-- Con `awsCdk`: las reglas `sonarjs/aws-*` del `recommended` de SonarJS.
+- Con `awsCdk`: las reglas `sonarjs/aws-*` de SonarJS.
 
 Para garantizar que no haya reglas de formato ni de estilo, el preset apaga al final:
 
 - todas las reglas de tipo `layout` de sus plugins;
 - `STYLISTIC_SUGGESTION_RULES`: preferencias de sintaxis, como `window` o `globalThis`, `.replace(/x/g)` o `.replaceAll`, `[^\d]` o `\D`, `if` o ternario, `.then` o `await`. El tipo que declaran los plugins no las distingue (algunas son `problem`), por eso están listadas una por una;
 - `DUPLICATED_RULES`: reglas que reportan lo mismo que otra regla activa o que otro análisis de golfo-lint (secretos: gitleaks), para que un agente no reciba dos veces el mismo hallazgo;
-- `NON_DEFECT_RULES`: reglas que marcan código válido, como los *security hotspots* de SonarJS (`spawn("git")` resuelto por `PATH`, URLs `http://` en tests, `Math.random()` para un jitter) o `no-promise-executor-return` en `new Promise((resolve) => setTimeout(resolve, ms))`.
+- `NON_DEFECT_RULES`: reglas que marcan código válido, como `no-promise-executor-return` en `new Promise((resolve) => setTimeout(resolve, ms))`, `prefer-nullish-coalescing` en un `||` que cae al valor por defecto con `""` o `0` a propósito, o `no-control-regex` en un patrón que rechaza caracteres de control.
 
 Los tests lo verifican sobre la configuración final, igual que que no quede ninguna regla en `warn`. Las listas salieron de correr el preset sobre TuTribu y agenda-mensual.
 
-En los tests se permiten `any` (cuerpos JSON sin tipo, `expect.any()`) y `!` (si el valor falta, el test falla ahí mismo).
+En los tests se permiten `any` (cuerpos JSON sin tipo, `expect.any()`), `!` (si el valor falta, el test falla ahí mismo), funciones largas, complejas o con muchos parámetros (arman fixtures y recorren casos), relanzar lo que se capturó y errores sin `cause` (para no volcar datos privados en la salida del test).
 
 TypeScript 7 todavía no es compatible con typescript-eslint ni con dependency-cruiser, así que el paquete trae su propio TypeScript 6 solo para el análisis, también en proyectos que compilan con TypeScript 7.
 
@@ -150,7 +171,7 @@ export default createDependencyCruiserConfig({
 });
 ```
 
-Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no puede depender de `application` ni de `infrastructure`, y `application` no puede depender de `infrastructure`.
+Con `hexagonalModulesPath`, cada subcarpeta es un módulo hexagonal: `domain` no puede depender de `application` ni de `infrastructure`, `application` no puede depender de `infrastructure`, y ninguna capa importa un `setup.ts` (el del módulo o el general de la carpeta), que es la raíz de composición que arma las capas.
 
 ## jscpd y knip
 
