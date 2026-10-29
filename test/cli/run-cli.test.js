@@ -80,6 +80,19 @@ describe("runCli", () => {
     }
   });
 
+  it("duplicates no cuenta como copiados los bloques de imports iguales", async () => {
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "golfo-jscpd-"));
+    try {
+      const imports = Array.from({ length: 12 }, (_, index) => `import { value${index}, other${index} } from "./module-${index}.js";`);
+      writeFileSync(path.join(projectDirectory, "first.js"), `${imports.join("\n")}\nexport const first = value0 + 1;\n`);
+      writeFileSync(path.join(projectDirectory, "second.js"), `${imports.join("\n")}\nexport const second = other3 * 2;\n`);
+      const options = createSilentOptions();
+      assert.equal(await runCli(["duplicates"], { ...options, cwd: projectDirectory }), EXIT_CODE_SUCCESS);
+    } finally {
+      rmSync(projectDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("duplicates pasa cuando no hay código copiado", async () => {
     const options = createSilentOptions();
     assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("complex") }), EXIT_CODE_SUCCESS);

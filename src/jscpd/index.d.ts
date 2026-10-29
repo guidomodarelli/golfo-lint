@@ -6,6 +6,8 @@ export interface JscpdDefaults {
   threshold: number;
   format: string[];
   ignore: string[];
+  /** Code-level regular expressions jscpd skips while matching, such as `import` statements. */
+  ignorePattern: string[];
   reporters: string[];
 }
 
