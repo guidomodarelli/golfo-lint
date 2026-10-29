@@ -8,6 +8,7 @@ import { usesOnlyConstantRawSql } from "./constant-sql.js";
 import { cancelsBeforeStateWrites } from "./effect-cancellation.js";
 import { checksFetchStatus } from "./fetch-status.js";
 import { resetsInFinally } from "./finally-reset.js";
+import { storesRevokedObjectUrl } from "./object-url-owner.js";
 import { callsOwnStateSetter } from "./state-setter-origin.js";
 import { callsPromiseMethod } from "./subscription-call.js";
 
@@ -157,6 +158,13 @@ const PROP_CALLBACK_RULE = "no-prop-callback-in-render";
 const EFFECT_CLEANUP_RULE = "effect-needs-cleanup";
 
 /**
+ * react-doctor rule that reports an object URL it cannot see revoked. It only follows the URL inside its function
+ * and file; it is dropped when the URL is kept in React state or in a ref and the module, or one it imports from the
+ * project, calls `URL.revokeObjectURL`.
+ */
+const OBJECT_URL_RULE = "no-create-object-url-without-revoke";
+
+/**
  * Reads a file of the project.
  * @callback SourceReader
  * @param {string} filePath - Path relative to the project, as react-doctor reports it.
@@ -231,6 +239,9 @@ function isDisprovedBySource(diagnostic, readSource) {
     }
     case EFFECT_CLEANUP_RULE: {
       return callsPromiseMethod(diagnostic, readSource);
+    }
+    case OBJECT_URL_RULE: {
+      return storesRevokedObjectUrl(filePath, line, column, readSource);
     }
     default: {
       return false;

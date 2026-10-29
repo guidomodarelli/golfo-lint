@@ -36,7 +36,7 @@ const STATE_HOOKS = new Set(["useState", "useReducer"]);
  * @param {ts.Expression} callee - Callee of a call.
  * @returns {string | undefined} The exported name, or `undefined` when it does not come from `react`.
  */
-function readReactExport(callee) {
+export function readReactExport(callee) {
   const value = unwrapExpression(callee);
   let local;
   if (ts.isIdentifier(value)) {
@@ -70,7 +70,7 @@ function readReactExport(callee) {
  * @param {ts.SignatureDeclaration} callable - Function.
  * @returns {ts.Expression[] | undefined} The returned expressions, or `undefined` when some return has no value.
  */
-function listReturnedExpressions(callable) {
+export function listReturnedExpressions(callable) {
   const body = "body" in callable ? callable.body : undefined;
   if (body === undefined) {
     return undefined;
@@ -292,7 +292,7 @@ function propertyOrigins(origins, name, trace) {
  * @param {string} name - Property name.
  * @returns {boolean} Whether some statement may change it.
  */
-function writesProperty(sourceFile, name) {
+export function writesProperty(sourceFile, name) {
   /** @param {ts.Expression} target - Written expression. */
   const isTarget = (target) => {
     const value = unwrapExpression(target);
@@ -397,6 +397,17 @@ export function callsOwnStateSetter(filePath, line, column, readSource) {
   if (found === undefined) {
     return false;
   }
-  const origins = valueOrigins(found.call.expression, { sourceFile: found.context.sourceFile, visited: new Set(), depth: 0 });
+  return isStateSetter(found.call.expression, found.context.sourceFile);
+}
+
+/**
+ * Checks whether every value an expression can hold is the setter of a `useState` or `useReducer` of the module,
+ * followed through `const`s, destructuring, object literals, `useMemo` and the calls of local functions.
+ * @param {ts.Expression} expression - Value, usually a callee.
+ * @param {ts.SourceFile} sourceFile - Module of the expression.
+ * @returns {boolean} Whether it is proven to be a state setter.
+ */
+export function isStateSetter(expression, sourceFile) {
+  const origins = valueOrigins(expression, { sourceFile, visited: new Set(), depth: 0 });
   return origins !== undefined && origins.length > 0 && origins.every((origin) => origin.kind === "setter");
 }

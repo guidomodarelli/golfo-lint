@@ -425,6 +425,126 @@ describe("effect-needs-cleanup con métodos del proyecto que devuelven Promise<v
   });
 });
 
+describe("no-create-object-url-without-revoke con la URL guardada en estado o en un ref", () => {
+  const rule = "no-create-object-url-without-revoke";
+  const marker = "URL.createObjectURL(";
+
+  /**
+   * Checks whether golfo-lint reports the object URL of `src/view.tsx`.
+   * @param {Record<string, string>} files - Files of the project, with `src/view.tsx`.
+   * @returns {boolean} Whether it is reported.
+   */
+  const reportsView = (files) => isReportedDiagnostic(findingAt(rule, "src/view.tsx", files["src/view.tsx"], marker), reader(files));
+
+  const inState = [
+    'import { useState } from "react";',
+    "export function usePreviews() {",
+    "  const [urls, setUrls] = useState<string[]>([]);",
+    "  const add = (file: File) => {",
+    "    const url = URL.createObjectURL(file);",
+    "    setUrls((current) => [...current, url]);",
+    "  };",
+    "  const clear = () => {",
+    "    urls.forEach((url) => URL.revokeObjectURL(url));",
+    "    setUrls([]);",
+    "  };",
+    "  return { add, clear, urls };",
+    "}",
+    "",
+  ].join("\n");
+
+  const shared = 'export function revokePreview(url: string) {\n  URL.revokeObjectURL(url);\n}\n';
+
+  const controller = [
+    'import { useCallback, useState } from "react";',
+    'import type { Router } from "./router";',
+    'import type { ViewProps } from "./props";',
+    "function useDraftState() {",
+    "  const [drafts, setDrafts] = useState<Draft[]>([]);",
+    "  const setImageDrafts = useCallback((updater: (current: Draft[]) => Draft[]) => {",
+    "    setDrafts((current) => merge(current, updater));",
+    "  }, []);",
+    "  return { drafts, setImageDrafts };",
+    "}",
+    "function useCounters() {",
+    "  return { count: 1 };",
+    "}",
+    "export type Controller = Omit<ViewProps, \"round\"> & { router: Router } & ReturnType<typeof useDraftState> &",
+    "  ReturnType<typeof useCounters>;",
+    "",
+  ].join("\n");
+
+  const actions = [
+    'import type { Controller } from "./controller";',
+    'import { revokePreview } from "./shared";',
+    "export const addImage = (controller: Controller, file: File) => {",
+    "  const previewUrl = typeof URL.createObjectURL === \"function\" ? URL.createObjectURL(file) : \"\";",
+    "  controller.setImageDrafts((current) => [...current, { previewUrl }]);",
+    "};",
+    "export const removeImage = (controller: Controller, url: string) => revokePreview(url);",
+    "",
+  ].join("\n");
+
+  const project = {
+    "src/controller.ts": controller,
+    "src/props.ts": "export type ViewProps = { slug: string; round: number };\n",
+    "src/shared.ts": shared,
+    "src/view.tsx": actions,
+  };
+
+  it("descarta la URL que se guarda con un setter de useState o en un ref, con revokeObjectURL en el archivo", () => {
+    assert.equal(reportsView({ "src/view.tsx": inState }), false);
+    const viaLocalFunction = inState.replace(
+      "    setUrls((current) => [...current, url]);",
+      "    keep(url);",
+    ).replace("  const add = (file: File) => {", "  const keep = (value: string) => setUrls((current) => [...current, value]);\n  const add = (file: File) => {");
+    assert.equal(reportsView({ "src/view.tsx": viaLocalFunction }), false);
+    const inRef = [
+      'import { useRef } from "react";',
+      'import { revokePreview } from "@/src/shared";',
+      "export function usePreview() {",
+      "  const preview = useRef<string | null>(null);",
+      "  return (file: File) => {",
+      "    if (preview.current) revokePreview(preview.current);",
+      "    preview.current = URL.createObjectURL(file);",
+      "  };",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(reportsView({ "src/shared.ts": shared, "src/view.tsx": inRef }), false);
+  });
+
+  it("descarta la URL que se entrega al setter de un hook por el tipo del controller, con revokeObjectURL en un módulo importado", () => {
+    assert.equal(reportsView(project), false);
+  });
+
+  it("mantiene URLs que no se guardan, o que se guardan sin ningún revokeObjectURL en el archivo ni en sus imports", () => {
+    const notStored = inState.replace("    setUrls((current) => [...current, url]);", "    window.open(url);");
+    assert.equal(reportsView({ "src/view.tsx": notStored }), true);
+    const derived = inState.replace("    setUrls((current) => [...current, url]);", "    setUrls((current) => [...current, String(url.length)]);");
+    assert.equal(reportsView({ "src/view.tsx": derived }), true);
+    const neverRevoked = inState.replace("    urls.forEach((url) => URL.revokeObjectURL(url));\n", "");
+    assert.equal(reportsView({ "src/view.tsx": neverRevoked }), true);
+    const revokedInPackage = { ...project, "src/view.tsx": actions.replace('from "./shared"', 'from "shared"') };
+    assert.equal(reportsView(revokedInPackage), true);
+    const notAStateSetter = inState.replace("const [urls, setUrls] = useState<string[]>([]);", "const [urls, setUrls] = useStore<string[]>([]);");
+    assert.equal(reportsView({ "src/view.tsx": notAStateSetter }), true);
+    const fromProps = inState
+      .replace("export function usePreviews() {", "export function usePreviews(setUrls: (update: (current: string[]) => string[]) => void) {")
+      .replace("  const [urls, setUrls] = useState<string[]>([]);\n", "  const urls: string[] = [];\n");
+    assert.equal(reportsView({ "src/view.tsx": fromProps }), true);
+  });
+
+  it("mantiene el setter de un controller cuyo tipo lo declara sin probar de dónde viene", () => {
+    const declaredOnly = { ...project, "src/controller.ts": "export type Controller = { setImageDrafts: (update: unknown) => void };\n" };
+    assert.equal(reportsView(declaredOnly), true);
+    const unknownMember = { ...project, "src/controller.ts": controller.replace("ReturnType<typeof useCounters>", "ExternalState") };
+    assert.equal(reportsView(unknownMember), true);
+    const overwritten = { ...project, "src/view.tsx": actions.replace("  controller.setImageDrafts((current)", "  controller.setImageDrafts = console.log;\n  controller.setImageDrafts((current)") };
+    assert.equal(reportsView(overwritten), true);
+  });
+});
+
 describe("reglas de react-doctor que son consejos", () => {
   it("descarta no-layout-property-animation, no-array-index-as-key y no-locale-format-in-render", () => {
     for (const rule of ["no-layout-property-animation", "no-array-index-as-key", "no-locale-format-in-render"]) {
