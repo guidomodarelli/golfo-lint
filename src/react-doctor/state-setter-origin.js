@@ -21,7 +21,7 @@ const STATE_HOOKS = new Set(["useState", "useReducer"]);
 
 /**
  * Where a value comes from: the setter of a state hook, or an object literal whose properties can be followed.
- * @typedef {{ kind: "setter" } | { kind: "object"; node: ts.ObjectLiteralExpression }} Origin
+ * @typedef {{ kind: "setter"; hook: ts.CallExpression } | { kind: "object"; node: ts.ObjectLiteralExpression }} Origin
  */
 
 /**
@@ -230,14 +230,54 @@ function identifierOrigins(identifier, trace) {
   if (ts.isVariableDeclaration(owner) && isConstDeclaration(owner) && owner.initializer !== undefined) {
     const initializer = unwrapExpression(owner.initializer);
     if (path.length === 1 && path[0] === 1 && ts.isCallExpression(initializer) && STATE_HOOKS.has(readReactExport(initializer.expression) ?? "")) {
-      return [{ kind: "setter" }];
+      return [{ kind: "setter", hook: initializer }];
     }
     return followPath(valueOrigins(initializer, next), path, next);
   }
   if (ts.isParameter(owner)) {
-    return parameterOrigins(owner, path, next);
+    // A parameter written in its function may hold any value by the time it is read, not the call-site argument.
+    return isReassigned(declaration, owner.parent) ? undefined : parameterOrigins(owner, path, next);
   }
   return undefined;
+}
+
+/**
+ * Checks whether some use of a binding inside a node writes it: an assignment, `++`/`--`, a destructuring
+ * assignment or the variable of a `for...in`/`for...of`.
+ * @param {ts.Identifier} declaration - Declaring identifier.
+ * @param {ts.Node} root - Node where its uses are.
+ * @returns {boolean} Whether the binding may change after it is declared.
+ */
+function isReassigned(declaration, root) {
+  return listReferences(root, declaration).some((reference) => isWriteTarget(reference));
+}
+
+/**
+ * Checks whether an expression is written: the left side of an assignment, the operand of `++`/`--`, a part of the
+ * pattern of a destructuring assignment, or the variable of a `for...in`/`for...of`.
+ * @param {ts.Node} node - Expression.
+ * @returns {boolean} Whether it receives a value.
+ */
+function isWriteTarget(node) {
+  const { parent } = node;
+  if (ts.isBinaryExpression(parent)) {
+    return parent.left === node && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
+  }
+  if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) {
+    return parent.operator === ts.SyntaxKind.PlusPlusToken || parent.operator === ts.SyntaxKind.MinusMinusToken;
+  }
+  if ((ts.isForInStatement(parent) || ts.isForOfStatement(parent)) && parent.initializer === node) {
+    return true;
+  }
+  const isPatternPart =
+    ts.isParenthesizedExpression(parent) ||
+    ts.isArrayLiteralExpression(parent) ||
+    ts.isSpreadElement(parent) ||
+    ts.isShorthandPropertyAssignment(parent) ||
+    ts.isSpreadAssignment(parent) ||
+    (ts.isPropertyAssignment(parent) && parent.initializer === node) ||
+    ts.isObjectLiteralExpression(parent);
+  return isPatternPart && isWriteTarget(parent);
 }
 
 /**
@@ -407,7 +447,29 @@ export function callsOwnStateSetter(filePath, line, column, readSource) {
  * @param {ts.SourceFile} sourceFile - Module of the expression.
  * @returns {boolean} Whether it is proven to be a state setter.
  */
-export function isStateSetter(expression, sourceFile) {
+function isStateSetter(expression, sourceFile) {
+  return findStateHooks(expression, sourceFile) !== undefined;
+}
+
+/**
+ * Finds the `useState` or `useReducer` calls whose setter an expression holds, followed like {@link isStateSetter}.
+ * @param {ts.Expression} expression - Value, usually a callee.
+ * @param {ts.SourceFile} sourceFile - Module of the expression.
+ * @returns {ts.CallExpression[] | undefined} The hook calls of every value it can hold, or `undefined` when one of
+ * them is not proven to be a state setter.
+ */
+export function findStateHooks(expression, sourceFile) {
   const origins = valueOrigins(expression, { sourceFile, visited: new Set(), depth: 0 });
-  return origins !== undefined && origins.length > 0 && origins.every((origin) => origin.kind === "setter");
+  if (origins === undefined || origins.length === 0) {
+    return undefined;
+  }
+  /** @type {ts.CallExpression[]} */
+  const hooks = [];
+  for (const origin of origins) {
+    if (origin.kind !== "setter") {
+      return undefined;
+    }
+    hooks.push(origin.hook);
+  }
+  return hooks;
 }

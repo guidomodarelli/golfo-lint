@@ -4,13 +4,16 @@
  * function and file, so it cannot see a URL kept in React state or in a ref and revoked by other functions or
  * modules. A URL counts as owned when the value `URL.createObjectURL` creates reaches a `useState` or `useReducer`
  * setter, maybe through local functions, `useCallback` or the declared type of a controller object built from the
- * returns of hooks, or is written to a ref (`ref.current = url`), and the module or one it imports from the project
- * calls `URL.revokeObjectURL`. A URL that is only used, or kept where nothing revokes object URLs, is still reported.
+ * returns of hooks, or is written to a ref (`ref.current = url`), and the module of the finding or the module of the
+ * state revokes that same value: `URL.revokeObjectURL`, or a function of the project that passes its parameter to it,
+ * receives the state, the ref or one of their elements, or a member with the name of the field the URL was stored
+ * under (`draft.previewUrl` for `{ previewUrl: url }`). A URL that is only used, kept where nothing revokes it, or
+ * kept next to code that revokes other URLs, is still reported.
  */
 import ts from "typescript";
-import { findCallAt, followImport, resolveImport } from "./project-modules.js";
+import { findCallAt, followImport } from "./project-modules.js";
 import { declaresTypeParameter, findDeclaration, listReferences, unwrapExpression } from "./source-scope.js";
-import { isStateSetter, listReturnedExpressions, readReactExport, writesProperty } from "./state-setter-origin.js";
+import { findStateHooks, listReturnedExpressions, readReactExport, writesProperty } from "./state-setter-origin.js";
 
 /** @typedef {import("./project-modules.js").SourceReader} SourceReader */
 /** @typedef {import("./project-modules.js").ModuleContext} ModuleContext */
@@ -18,12 +21,36 @@ import { isStateSetter, listReturnedExpressions, readReactExport, writesProperty
 /** Values, functions and types followed before giving up, so a cycle cannot loop forever. */
 const MAX_DEPTH = 24;
 
+/** Step of an access path that reads an element of a collection: `list[i]`, `for (const x of list)`, `list.forEach`. */
+const ELEMENT = Symbol("element");
+
+/** Array methods whose callback receives the elements of the array as its first parameter. */
+const ELEMENT_CALLBACKS = new Set(["forEach", "map", "flatMap", "filter", "find", "findLast", "some", "every"]);
+
+/**
+ * Value reached from a binding by reading members and elements: `drafts[ELEMENT].previewUrl` for
+ * `drafts.forEach((draft) => draft.previewUrl)`.
+ * @typedef {object} AccessPath
+ * @property {ts.Node | undefined} root - Declaring identifier, or parameter, the value is read from; `undefined` when
+ * it is not a binding (a call, a literal, a global).
+ * @property {Array<string | symbol>} path - Member names and {@link ELEMENT} steps read from the root.
+ */
+
+/**
+ * Where an object URL is kept: the state variable of the setter that receives it, or the ref it is written to.
+ * @typedef {AccessPath | undefined} Holder
+ */
+
 /**
  * @typedef {object} Flow
  * @property {ModuleContext} context - Module being followed.
+ * @property {ModuleContext} origin - Module of the finding.
  * @property {SourceReader} readSource - Reads files of the project.
  * @property {Set<ts.Node>} visited - Declarations and functions already followed.
  * @property {number} depth - Steps followed so far.
+ * @property {string | null | undefined} field - Innermost member the URL was stored under (`previewUrl` in
+ * `{ previewUrl: url }`), `null` for a computed name, or `undefined` when it is stored as it is.
+ * @property {Map<ts.Node, AccessPath[]>} revoked - Values revoked inside modules and functions already scanned.
  */
 
 /**
@@ -33,10 +60,17 @@ const MAX_DEPTH = 24;
  * @returns {node is ts.CallExpression} Whether it calls that method.
  */
 function isUrlCall(node, method) {
-  if (!ts.isCallExpression(node)) {
-    return false;
-  }
-  const callee = unwrapExpression(node.expression);
+  return ts.isCallExpression(node) && isUrlMethod(node.expression, method);
+}
+
+/**
+ * Checks whether an expression is `URL.<method>` on the global `URL`.
+ * @param {ts.Expression} expression - Expression, usually a callee.
+ * @param {string} method - Method name.
+ * @returns {boolean} Whether it names that method.
+ */
+function isUrlMethod(expression, method) {
+  const callee = unwrapExpression(expression);
   return (
     ts.isPropertyAccessExpression(callee) &&
     callee.name.text === method &&
@@ -47,40 +81,265 @@ function isUrlCall(node, method) {
 }
 
 /**
- * Checks whether a module calls `URL.revokeObjectURL`.
- * @param {ts.SourceFile} sourceFile - Module.
- * @returns {boolean} Whether some call revokes an object URL.
+ * Lists the values revoked inside a node: arguments of `URL.revokeObjectURL` and of functions of the project that
+ * pass a parameter to it, and elements of arrays whose `forEach` receives such a function.
+ * @param {ts.Node} root - Module or function body.
+ * @param {Flow} flow - State of the search, with the module of the node.
+ * @returns {AccessPath[]} Access paths of the revoked values.
  */
-function revokesObjectUrls(sourceFile) {
-  let found = false;
+function listRevokedValues(root, flow) {
+  const known = flow.revoked.get(root);
+  if (known !== undefined) {
+    return known;
+  }
+  /** @type {AccessPath[]} */
+  const revoked = [];
+  // A function that revokes through itself adds nothing on the second visit.
+  flow.revoked.set(root, revoked);
   /** @param {ts.Node} node - Node to visit. */
   const visit = (node) => {
-    if (!found) {
-      found = isUrlCall(node, "revokeObjectURL");
-      ts.forEachChild(node, visit);
+    if (ts.isCallExpression(node)) {
+      revoked.push(...listRevokedArguments(node, flow));
     }
+    ts.forEachChild(node, visit);
   };
-  visit(sourceFile);
-  return found;
+  visit(root);
+  return revoked;
 }
 
 /**
- * Checks whether a module, or a module of the project it imports, calls `URL.revokeObjectURL`.
- * @param {ModuleContext} context - Module of the finding.
- * @param {SourceReader} readSource - Reads files of the project.
- * @returns {boolean} Whether some code at hand releases object URLs.
+ * Lists the values a call revokes.
+ * @param {ts.CallExpression} call - Call.
+ * @param {Flow} flow - State of the search, with the module of the call.
+ * @returns {AccessPath[]} Access paths of the revoked arguments, or of the elements of the revoked receiver.
  */
-function revokesNearby(context, readSource) {
-  if (revokesObjectUrls(context.sourceFile)) {
-    return true;
-  }
-  return context.sourceFile.statements.some((statement) => {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      return false;
+function listRevokedArguments(call, flow) {
+  /** @type {AccessPath[]} */
+  const revoked = [];
+  const spreadAt = call.arguments.findIndex((argument) => ts.isSpreadElement(argument));
+  call.arguments.forEach((argument, index) => {
+    if (spreadAt !== -1 && index >= spreadAt) {
+      return;
     }
-    const imported = resolveImport(context.filePath, statement.moduleSpecifier.text, readSource);
-    return imported !== undefined && revokesObjectUrls(imported.sourceFile);
+    const target = readAccessPath(argument, flow.depth);
+    for (const path of listRevokedPaths(call.expression, index, flow)) {
+      revoked.push({ root: target.root, path: [...target.path, ...path] });
+    }
   });
+  const callee = unwrapExpression(call.expression);
+  const callback = call.arguments[0];
+  if (ts.isPropertyAccessExpression(callee) && ELEMENT_CALLBACKS.has(callee.name.text) && callback !== undefined && !ts.isSpreadElement(callback)) {
+    const receiver = readAccessPath(callee.expression, flow.depth);
+    for (const path of listRevokedPaths(callback, 0, flow)) {
+      revoked.push({ root: receiver.root, path: [...receiver.path, ELEMENT, ...path] });
+    }
+  }
+  return revoked;
+}
+
+/**
+ * Lists what a function revokes of the argument it receives at a position.
+ * @param {ts.Expression} callee - Callee, or a function passed as a callback.
+ * @param {number} index - Position of the argument.
+ * @param {Flow} flow - State of the search, with the module of the callee.
+ * @returns {Array<Array<string | symbol>>} Access paths, from the argument, of the values revoked: `[]` when the
+ * argument itself is revoked.
+ */
+function listRevokedPaths(callee, index, flow) {
+  if (isUrlMethod(callee, "revokeObjectURL")) {
+    return index === 0 ? [[]] : [];
+  }
+  if (flow.depth >= MAX_DEPTH) {
+    return [];
+  }
+  const callable = resolveCallee(callee, deeper(flow));
+  const parameter = callable?.node.parameters[index];
+  const body = callable !== undefined && "body" in callable.node ? callable.node.body : undefined;
+  if (
+    callable === undefined ||
+    parameter === undefined ||
+    body === undefined ||
+    parameter.dotDotDotToken !== undefined ||
+    callable.node.parameters.slice(0, index).some((candidate) => candidate.dotDotDotToken !== undefined)
+  ) {
+    return [];
+  }
+  return listRevokedValues(body, { ...deeper(flow), context: callable.context })
+    .filter((value) => value.root === parameter)
+    .map((value) => value.path);
+}
+
+/**
+ * Resolves the function a callee names: a function of the module, or one it imports from the project.
+ * @param {ts.Expression} callee - Callee.
+ * @param {Flow} flow - State of the search, with the module of the callee.
+ * @returns {{ node: ts.SignatureDeclaration; context: ModuleContext } | undefined} The function and its module.
+ */
+function resolveCallee(callee, flow) {
+  const local = resolveFunction(callee, flow);
+  if (local !== undefined) {
+    return local;
+  }
+  const value = unwrapExpression(callee);
+  const declaration = ts.isIdentifier(value) ? findDeclaration(value) : undefined;
+  return declaration !== undefined && ts.isImportSpecifier(declaration.parent) ? findModuleFunction(declaration.text, flow) : undefined;
+}
+
+/**
+ * Reads the binding a value is read from and the members and elements read on the way. Aliases (`const a = b.c`),
+ * the variable of a `for...of` and the first parameter of an array callback (`list.forEach((item) => ...)`) are
+ * followed to the collection they come from.
+ * @param {ts.Expression} expression - Value.
+ * @param {number} depth - Steps followed so far.
+ * @returns {AccessPath} Its access path.
+ */
+function readAccessPath(expression, depth) {
+  const value = unwrapExpression(expression);
+  if (depth >= MAX_DEPTH) {
+    return { root: undefined, path: [] };
+  }
+  if (ts.isPropertyAccessExpression(value)) {
+    return appendSteps(readAccessPath(value.expression, depth + 1), [value.name.text]);
+  }
+  if (ts.isElementAccessExpression(value)) {
+    const key = unwrapExpression(value.argumentExpression);
+    return appendSteps(readAccessPath(value.expression, depth + 1), [ts.isStringLiteral(key) ? key.text : ELEMENT]);
+  }
+  if (!ts.isIdentifier(value)) {
+    return { root: undefined, path: [] };
+  }
+  const declaration = findDeclaration(value);
+  return declaration === undefined ? { root: undefined, path: [] } : readBindingPath(declaration, depth + 1);
+}
+
+/**
+ * Reads the access path of a binding from its declaration.
+ * @param {ts.Identifier} declaration - Declaring identifier.
+ * @param {number} depth - Steps followed so far.
+ * @returns {AccessPath} Its access path: the collection or value it comes from, or the binding itself.
+ */
+function readBindingPath(declaration, depth) {
+  /** @type {Array<string | symbol>} */
+  const steps = [];
+  /** @type {ts.Node} */
+  let owner = declaration.parent;
+  while (ts.isBindingElement(owner)) {
+    const pattern = owner.parent;
+    const name = owner.propertyName ?? owner.name;
+    if (owner.dotDotDotToken !== undefined || (ts.isObjectBindingPattern(pattern) && !ts.isIdentifier(name) && !ts.isStringLiteral(name))) {
+      return { root: declaration, path: [] };
+    }
+    steps.unshift(ts.isArrayBindingPattern(pattern) ? ELEMENT : /** @type {ts.Identifier | ts.StringLiteral} */ (name).text);
+    owner = pattern.parent;
+  }
+  if (ts.isParameter(owner)) {
+    const collection = readCallbackCollection(owner);
+    return collection === undefined
+      ? { root: owner, path: steps }
+      : appendSteps(readAccessPath(collection, depth), [ELEMENT, ...steps]);
+  }
+  if (ts.isVariableDeclaration(owner) && ts.isForOfStatement(owner.parent.parent) && owner.parent.parent.initializer === owner.parent) {
+    return appendSteps(readAccessPath(owner.parent.parent.expression, depth), [ELEMENT, ...steps]);
+  }
+  const initializer = ts.isVariableDeclaration(owner) && isConstList(owner) && owner.initializer !== undefined ? unwrapExpression(owner.initializer) : undefined;
+  // Only aliases of other values are followed: a call such as `useRef()` or `useState()` makes a value of its own.
+  if (initializer !== undefined && (ts.isIdentifier(initializer) || ts.isPropertyAccessExpression(initializer) || ts.isElementAccessExpression(initializer))) {
+    return appendSteps(readAccessPath(initializer, depth), steps);
+  }
+  return { root: declaration, path: [] };
+}
+
+/**
+ * Reads the array whose elements the first parameter of an array callback receives.
+ * @param {ts.ParameterDeclaration} parameter - Parameter.
+ * @returns {ts.Expression | undefined} The receiver of `receiver.forEach(callback)`, or `undefined` for other
+ * parameters.
+ */
+function readCallbackCollection(parameter) {
+  const callable = parameter.parent;
+  const call = callable.parent;
+  if (
+    !(ts.isArrowFunction(callable) || ts.isFunctionExpression(callable)) ||
+    callable.parameters[0] !== parameter ||
+    !ts.isCallExpression(call) ||
+    call.arguments[0] !== callable
+  ) {
+    return undefined;
+  }
+  const callee = unwrapExpression(call.expression);
+  return ts.isPropertyAccessExpression(callee) && ELEMENT_CALLBACKS.has(callee.name.text) ? callee.expression : undefined;
+}
+
+/**
+ * Adds steps to an access path.
+ * @param {AccessPath} access - Access path.
+ * @param {Array<string | symbol>} steps - Steps to add.
+ * @returns {AccessPath} The longer path.
+ */
+function appendSteps(access, steps) {
+  return { root: access.root, path: [...access.path, ...steps] };
+}
+
+/**
+ * Checks whether code at hand revokes the object URL where it is kept: the module of the finding or the module of
+ * the holder revokes a member with the name of the field the URL was stored under, or, when it is stored as it is,
+ * the holder itself or one of its elements.
+ * @param {Holder[]} holders - Where the URL is kept.
+ * @param {Flow} flow - State of the search, with the module of the holders.
+ * @returns {boolean} Whether a revocation is tied to the stored URL.
+ */
+function isReleased(holders, flow) {
+  if (flow.field === null) {
+    return false;
+  }
+  const modules = new Set([flow.origin, flow.context]);
+  const revoked = [...modules].flatMap((context) => listRevokedValues(context.sourceFile, { ...flow, context, depth: 0 }));
+  const { field } = flow;
+  if (field !== undefined) {
+    return revoked.some((value) => value.path.at(-1) === field);
+  }
+  return (
+    holders.length > 0 &&
+    holders.every(
+      (holder) =>
+        holder !== undefined &&
+        holder.root !== undefined &&
+        revoked.some(
+          (value) =>
+            value.root === holder.root &&
+            value.path.length >= holder.path.length &&
+            holder.path.every((step, index) => value.path[index] === step) &&
+            value.path.slice(holder.path.length).every((step) => step === ELEMENT),
+        ),
+    )
+  );
+}
+
+/**
+ * Reads the state variable of a `useState` or `useReducer` call: the first element of `const [value, setValue]`.
+ * @param {ts.CallExpression} hook - Hook call.
+ * @returns {Holder} Access path of the state, or `undefined` when it is not bound to a name.
+ */
+function readStateHolder(hook) {
+  const declaration = hook.parent;
+  if (!ts.isVariableDeclaration(declaration) || !ts.isArrayBindingPattern(declaration.name)) {
+    return undefined;
+  }
+  const first = declaration.name.elements[0];
+  return first !== undefined && ts.isBindingElement(first) && first.dotDotDotToken === undefined && ts.isIdentifier(first.name)
+    ? { root: first.name, path: [] }
+    : undefined;
+}
+
+/**
+ * Checks whether a value passed to a state setter is released.
+ * @param {ts.Expression} setter - Expression that may hold a state setter.
+ * @param {Flow} flow - State of the search, with the module of the setter.
+ * @returns {boolean | undefined} Whether the stored URL is revoked, or `undefined` when it is not a state setter.
+ */
+function releasesThroughSetter(setter, flow) {
+  const hooks = findStateHooks(setter, flow.context.sourceFile);
+  return hooks === undefined ? undefined : isReleased(hooks.map((hook) => readStateHolder(hook)), flow);
 }
 
 /**
@@ -106,7 +365,7 @@ function isStored(node, flow) {
   const { parent } = node;
   const next = deeper(flow);
   if (carriesValue(parent, node)) {
-    return isStored(parent, next);
+    return isStored(parent, next.field === undefined ? { ...next, field: readFieldName(parent) } : next);
   }
   if ((ts.isArrowFunction(parent) && parent.body === node) || ts.isReturnStatement(parent)) {
     const callable = ts.isReturnStatement(parent) ? findEnclosingFunction(parent) : parent;
@@ -157,12 +416,26 @@ function isStoredByUse(node, parent, flow) {
   }
   if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node) {
     const target = unwrapExpression(parent.left);
-    return ts.isPropertyAccessExpression(target) && target.name.text === "current";
+    return ts.isPropertyAccessExpression(target) && target.name.text === "current" && isReleased([readAccessPath(target, 0)], flow);
   }
   if (ts.isVariableDeclaration(parent) && parent.initializer === node) {
     return isConstBinding(parent) && referencesStore(/** @type {ts.Identifier} */ (parent.name), flow.context.sourceFile, flow);
   }
   return false;
+}
+
+/**
+ * Reads the member name a value is stored under when its parent puts it in an object literal.
+ * @param {ts.Node} parent - Expression that carries the value.
+ * @returns {string | null | undefined} The member name, `null` for a computed name, or `undefined` when the parent
+ * does not name a member.
+ */
+function readFieldName(parent) {
+  if (!ts.isShorthandPropertyAssignment(parent) && !ts.isPropertyAssignment(parent)) {
+    return undefined;
+  }
+  const { name } = parent;
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name) ? name.text : null;
 }
 
 /**
@@ -198,11 +471,16 @@ function findEnclosingFunction(node) {
  * @returns {boolean} Whether its value cannot change.
  */
 function isConstBinding(declaration) {
-  return (
-    ts.isIdentifier(declaration.name) &&
-    ts.isVariableDeclarationList(declaration.parent) &&
-    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-  );
+  return ts.isIdentifier(declaration.name) && isConstList(declaration);
+}
+
+/**
+ * Checks whether a variable declaration belongs to a `const` list.
+ * @param {ts.VariableDeclaration} declaration - Declaration.
+ * @returns {boolean} Whether its bindings cannot be reassigned.
+ */
+function isConstList(declaration) {
+  return ts.isVariableDeclarationList(declaration.parent) && (declaration.parent.flags & ts.NodeFlags.Const) !== 0;
 }
 
 /**
@@ -232,8 +510,9 @@ function passesToStore(callee, index, flow) {
   if (index < 0 || flow.depth >= MAX_DEPTH) {
     return false;
   }
-  if (isStateSetter(callee, flow.context.sourceFile)) {
-    return true;
+  const released = releasesThroughSetter(callee, flow);
+  if (released !== undefined) {
+    return released;
   }
   const callable = resolveFunction(callee, flow);
   if (callable !== undefined) {
@@ -327,8 +606,9 @@ function passesToTypedMember(callee, index, flow) {
     providers.length > 0 &&
     providers.every((provider) => {
       const providerFlow = { ...deeper(flow), context: provider.context };
-      if (isStateSetter(provider.value, provider.context.sourceFile)) {
-        return true;
+      const released = releasesThroughSetter(provider.value, providerFlow);
+      if (released !== undefined) {
+        return released;
       }
       const callable = resolveFunction(provider.value, providerFlow);
       return callable !== undefined && storesParameter(callable, index, providerFlow);
@@ -558,8 +838,8 @@ function readObjectMemberValues(object, name, context) {
 }
 
 /**
- * Checks whether the object URL that react-doctor reports is kept in React state or in a ref, and the module or one
- * it imports from the project revokes object URLs.
+ * Checks whether the object URL that react-doctor reports is kept in React state or in a ref, and code at hand
+ * revokes it where it is kept.
  * @param {string} filePath - Path of the file, relative to the project.
  * @param {number} line - 1-based line of the `URL.createObjectURL` call.
  * @param {number} column - 1-based column of the call.
@@ -568,8 +848,16 @@ function readObjectMemberValues(object, name, context) {
  */
 export function storesRevokedObjectUrl(filePath, line, column, readSource) {
   const found = findCallAt(filePath, line, column, readSource);
-  if (found === undefined || !isUrlCall(found.call, "createObjectURL") || !revokesNearby(found.context, readSource)) {
+  if (found === undefined || !isUrlCall(found.call, "createObjectURL")) {
     return false;
   }
-  return isStored(found.call, { context: found.context, readSource, visited: new Set(), depth: 0 });
+  return isStored(found.call, {
+    context: found.context,
+    origin: found.context,
+    readSource,
+    visited: new Set(),
+    depth: 0,
+    field: undefined,
+    revoked: new Map(),
+  });
 }

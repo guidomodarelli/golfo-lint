@@ -375,6 +375,16 @@ describe("no-prop-callback-in-render con el setter del propio componente", () =>
     const firstElement = source.replace("const [step, setStep] = useState(0);", "const [setStep, step] = useState(0);");
     assert.equal(reportsIn(rule, firstElement, marker), true);
   });
+
+  it("mantiene el callback de un hook que reasigna su parámetro antes de llamarlo", () => {
+    const withFallback = source
+      .replace("setStep: (step: number) => void) {", "setStep: (step: number) => void, fallback: (step: number) => void) {\n  REASSIGN;")
+      .replace("useMilestoneStep(steps[0] ?? null, steps, setters.setStep);", "useMilestoneStep(steps[0] ?? null, steps, setters.setStep, console.log);");
+    for (const reassign of ["setStep = fallback", "setStep ??= fallback", "[setStep] = [fallback]", "({ setStep } = { setStep: fallback })", "const swap = () => { setStep = fallback; }"]) {
+      assert.equal(reportsIn(rule, withFallback.replace("REASSIGN", reassign), marker), true, reassign);
+    }
+    assert.equal(reportsIn(rule, withFallback.replace("  REASSIGN;\n", ""), marker), false);
+  });
 });
 
 describe("effect-needs-cleanup con métodos del proyecto que devuelven Promise<void>", () => {
@@ -481,7 +491,7 @@ describe("no-create-object-url-without-revoke con la URL guardada en estado o en
     "  const previewUrl = typeof URL.createObjectURL === \"function\" ? URL.createObjectURL(file) : \"\";",
     "  controller.setImageDrafts((current) => [...current, { previewUrl }]);",
     "};",
-    "export const removeImage = (controller: Controller, url: string) => revokePreview(url);",
+    "export const removeImage = (controller: Controller, draft: { previewUrl: string }) => revokePreview(draft.previewUrl);",
     "",
   ].join("\n");
 
@@ -533,6 +543,71 @@ describe("no-create-object-url-without-revoke con la URL guardada en estado o en
       .replace("export function usePreviews() {", "export function usePreviews(setUrls: (update: (current: string[]) => string[]) => void) {")
       .replace("  const [urls, setUrls] = useState<string[]>([]);\n", "  const urls: string[] = [];\n");
     assert.equal(reportsView({ "src/view.tsx": fromProps }), true);
+  });
+
+  it("mantiene la URL guardada cuando el revokeObjectURL que hay a mano libera otra URL", () => {
+    const other = [
+      'import { useEffect, useState } from "react";',
+      "export function useOther(file: File) {",
+      '  const [other, setOther] = useState("");',
+      "  useEffect(() => {",
+      "    const url = URL.createObjectURL(file);",
+      "    setOther(url);",
+      "    return () => URL.revokeObjectURL(url);",
+      "  }, [file]);",
+      "  return other;",
+      "}",
+      "",
+    ].join("\n");
+    const view = [
+      'import { useState } from "react";',
+      'import { useOther } from "./other";',
+      "export function usePreview(file: File) {",
+      '  const [preview, setPreview] = useState("");',
+      "  const update = () => setPreview(URL.createObjectURL(file));",
+      "  return { preview, update, other: useOther(file) };",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(reportsView({ "src/other.tsx": other, "src/view.tsx": view }), true);
+    const otherState = inState
+      .replace("  const [urls, setUrls] = useState<string[]>([]);", "  const [urls, setUrls] = useState<string[]>([]);\n  const [others] = useState<string[]>([]);")
+      .replace("urls.forEach((url) => URL.revokeObjectURL(url));", "others.forEach((url) => URL.revokeObjectURL(url));");
+    assert.equal(reportsView({ "src/view.tsx": otherState }), true);
+    const otherField = { ...project, "src/view.tsx": actions.replaceAll("previewUrl: string }) => revokePreview(draft.previewUrl)", "thumbnailUrl: string }) => revokePreview(draft.thumbnailUrl)") };
+    assert.equal(reportsView(otherField), true);
+    const otherValue = { ...project, "src/view.tsx": actions.replace("revokePreview(draft.previewUrl)", "revokePreview(String(draft))") };
+    assert.equal(reportsView(otherValue), true);
+    const otherRef = [
+      'import { useRef } from "react";',
+      'import { revokePreview } from "./shared";',
+      "export function usePreview() {",
+      "  const preview = useRef<string | null>(null);",
+      "  const previous = useRef<string | null>(null);",
+      "  return (file: File) => {",
+      "    if (previous.current) revokePreview(previous.current);",
+      "    preview.current = URL.createObjectURL(file);",
+      "  };",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(reportsView({ "src/shared.ts": shared, "src/view.tsx": otherRef }), true);
+    const sameRef = otherRef.replace("if (previous.current) revokePreview(previous.current);", "if (preview.current) revokePreview(preview.current);");
+    assert.equal(reportsView({ "src/shared.ts": shared, "src/view.tsx": sameRef }), false);
+  });
+
+  it("descarta la URL de un campo cuyos elementos revoca una función del proyecto", () => {
+    const sharedList = `${shared}export function revokePreviews(drafts: Array<{ previewUrl: string }>) {\n  drafts.forEach((draft) => revokePreview(draft.previewUrl));\n}\n`;
+    const viaList = {
+      ...project,
+      "src/shared.ts": sharedList,
+      "src/view.tsx": actions
+        .replace('import { revokePreview } from "./shared";', 'import { revokePreviews } from "./shared";')
+        .replace("(controller: Controller, draft: { previewUrl: string }) => revokePreview(draft.previewUrl)", "(controller: Controller) => revokePreviews(controller.drafts)"),
+    };
+    assert.equal(reportsView(viaList), false);
+    const urlsList = inState.replace("urls.forEach((url) => URL.revokeObjectURL(url));", "urls.forEach(release);").replace("export function usePreviews() {", "function release(url: string) {\n  URL.revokeObjectURL(url);\n}\nexport function usePreviews() {");
+    assert.equal(reportsView({ "src/view.tsx": urlsList }), false);
   });
 
   it("mantiene el setter de un controller cuyo tipo lo declara sin probar de dónde viene", () => {
