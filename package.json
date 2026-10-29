@@ -1,6 +1,6 @@
 {
   "name": "@golfo/lint",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Reglas de calidad de código para agentes de IA: ESLint, Stylelint, jscpd, knip, dependency-cruiser, react-doctor, react-scan (solo en desarrollo), publint, attw, actionlint, zizmor, gitleaks y sherif, sin reglas de formato.",
   "type": "module",
   "license": "MIT",

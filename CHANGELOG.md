@@ -4,6 +4,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-29
+
 ### Fixed
 
 - `golfo-lint duplicates` ya no cuenta como código copiado los bloques de `import` iguales entre archivos: la única forma de "arreglarlos" era reordenar los imports.
