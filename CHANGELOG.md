@@ -4,6 +4,8 @@ Todos los cambios relevantes de `@golfo/lint` se documentan en este archivo, seg
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-28
+
 ### Removed
 
 - `golfo-lint react` deja de mostrar `no-layout-property-animation`, `no-array-index-as-key` y `no-locale-format-in-render` de react-doctor: son consejos que no puede decidir. Animar `width` o `height` es lo que reacomoda el contenido de alrededor; una key por índice solo falla si la lista se reordena y sus ítems guardan estado; y no sabe si una fecha formateada llega al render del servidor, mientras que su arreglo (fijar `timeZone`) cambia la hora que ve el usuario. En TuTribu, los 11 reportes eran código correcto.
