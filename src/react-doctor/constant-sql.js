@@ -2,13 +2,15 @@
  * @module react-doctor/constant-sql Decides whether every `sql.raw(...)` of a file receives SQL fixed in the code:
  * a string literal, a `const` that holds one (`sql.raw(EFFECT_SQL.begin)`), a ternary or a template literal built
  * only from such values, or a parameter whose declared type only admits values of the code (a union of string
- * literals, `(typeof X)[keyof typeof X]` of an `as const` object). Bindings are followed through the lexical scope
- * and the imports of the project. A value whose origin cannot be proven, like an untyped parameter, a call or a
+ * literals, `(typeof X)[keyof typeof X]` of an `as const` object). A type query (`typeof X`) is checked against the
+ * type TypeScript gives `X` (its annotation, or the type inferred from its initializer), never against its current
+ * value: `const X: string = "a"` admits any string. Bindings are followed through the lexical scope and the imports
+ * of the project. A value whose origin cannot be proven, like an untyped parameter, a call or a
  * package import, counts as built at run time.
  */
 import ts from "typescript";
 import { findImportedName, parseModule, resolveImport } from "./project-modules.js";
-import { unwrapExpression } from "./source-scope.js";
+import { declaresTypeParameter, unwrapExpression } from "./source-scope.js";
 
 /** @typedef {import("./project-modules.js").SourceReader} SourceReader */
 /** @typedef {import("./project-modules.js").ModuleContext} ModuleContext */
@@ -257,14 +259,14 @@ function resolveReadonlyObject(objectIdentifier, context, readSource, depth) {
 
 /**
  * Checks whether a property of a constant object holds SQL fixed in the code.
- * @param {{ object: ts.Identifier; name: string }} property - Name of the object at its point of use, and the
- * property read.
+ * @param {{ object: ts.Identifier; name: string; typed?: boolean }} property - Name of the object at its point of
+ * use, the property read, and whether its type, rather than its value, must admit only literals (for a type query).
  * @param {ModuleContext} context - Module of the use.
  * @param {SourceReader} readSource - Reads files of the project.
  * @param {number} depth - Imports followed so far.
  * @returns {boolean} Whether the property exists and its value is proven to be a literal.
  */
-function isConstantProperty({ object: objectIdentifier, name: propertyName }, context, readSource, depth) {
+function isConstantProperty({ object: objectIdentifier, name: propertyName, typed = false }, context, readSource, depth) {
   const resolved = resolveReadonlyObject(objectIdentifier, context, readSource, depth);
   const property = resolved?.object.properties.find(
     (candidate) => ts.isPropertyAssignment(candidate) && candidate.name.getText(resolved.context.sourceFile) === propertyName,
@@ -273,13 +275,13 @@ function isConstantProperty({ object: objectIdentifier, name: propertyName }, co
     resolved !== undefined &&
     property !== undefined &&
     ts.isPropertyAssignment(property) &&
-    isConstantSql(property.initializer, resolved.context, readSource, depth + 1)
+    (typed ? hasLiteralType : isConstantSql)(property.initializer, resolved.context, readSource, depth + 1)
   );
 }
 
 /**
- * Checks whether every property of a constant object holds SQL fixed in the code, as `(typeof X)[keyof typeof X]`
- * requires.
+ * Checks whether the type of every property of a constant object only admits SQL fixed in the code, as
+ * `(typeof X)[keyof typeof X]` requires.
  * @param {ts.Identifier} objectIdentifier - Name of the object at its point of use.
  * @param {ModuleContext} context - Module of the use.
  * @param {SourceReader} readSource - Reads files of the project.
@@ -293,7 +295,7 @@ function hasOnlyConstantProperties(objectIdentifier, context, readSource, depth)
     resolved.object.properties.length > 0 &&
     resolved.object.properties.every(
       (property) =>
-        ts.isPropertyAssignment(property) && isConstantSql(property.initializer, resolved.context, readSource, depth + 1),
+        ts.isPropertyAssignment(property) && hasLiteralType(property.initializer, resolved.context, readSource, depth + 1),
     )
   );
 }
@@ -323,20 +325,6 @@ function resolveTypeAlias(name, context, readSource, depth) {
     scope = scope.parent;
   }
   return resolveModuleTypeAlias(name.text, context, readSource, depth);
-}
-
-/**
- * Checks whether a node declares a type parameter of a name, which hides any type alias of that name.
- * @param {ts.Node} node - Function, class, interface, type alias or mapped type.
- * @param {string} name - Type name.
- * @returns {boolean} Whether one of its type parameters has the name.
- */
-function declaresTypeParameter(node, name) {
-  if (ts.isMappedTypeNode(node)) {
-    return node.typeParameter.name.text === name;
-  }
-  const { typeParameters } = /** @type {{ typeParameters?: ts.NodeArray<ts.TypeParameterDeclaration> }} */ (node);
-  return typeParameters?.some((parameter) => parameter.name.text === name) ?? false;
 }
 
 /**
@@ -451,7 +439,7 @@ function isConstantIndexedAccess(type, context, readSource, depth) {
   return (
     keys !== undefined &&
     keys.length > 0 &&
-    keys.every((key) => isConstantProperty({ object: objectIdentifier, name: key }, context, readSource, depth))
+    keys.every((key) => isConstantProperty({ object: objectIdentifier, name: key, typed: true }, context, readSource, depth))
   );
 }
 
@@ -480,11 +468,11 @@ function isConstantType(type, context, readSource, depth) {
   if (ts.isTypeQueryNode(type) && type.typeArguments === undefined) {
     const { exprName } = type;
     if (ts.isIdentifier(exprName)) {
-      return isConstantSql(exprName, context, readSource, depth + 1);
+      return isLiteralTypedName(exprName, context, readSource, depth + 1);
     }
     return (
       ts.isIdentifier(exprName.left) &&
-      isConstantProperty({ object: exprName.left, name: exprName.right.text }, context, readSource, depth + 1)
+      isConstantProperty({ object: exprName.left, name: exprName.right.text, typed: true }, context, readSource, depth + 1)
     );
   }
   if (ts.isIndexedAccessTypeNode(type)) {
@@ -493,6 +481,74 @@ function isConstantType(type, context, readSource, depth) {
   if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeArguments === undefined) {
     const alias = resolveTypeAlias(type.typeName, context, readSource, depth);
     return alias !== undefined && isConstantType(alias.type, alias.context, readSource, depth + 1);
+  }
+  return false;
+}
+
+/**
+ * Checks whether the type of a name at its point of use only admits SQL fixed in the code, as `typeof name`
+ * requires: the type of a parameter, the annotation of a `const`, or the type TypeScript infers from its initializer.
+ * @param {ts.Identifier} identifier - Name at its point of use.
+ * @param {ModuleContext} context - Module of the use.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @param {number} depth - Imports followed so far.
+ * @returns {boolean} Whether every value of its type is proven to be a literal.
+ */
+function isLiteralTypedName(identifier, context, readSource, depth) {
+  if (depth >= MAX_IMPORT_DEPTH) {
+    return false;
+  }
+  const local = resolveLocalBinding(identifier, identifier.text);
+  if (local.kind === "parameter") {
+    return isConstantParameter(local.parameter, context, readSource, depth + 1);
+  }
+  const constant = resolveBinding(identifier, context, readSource, depth);
+  const declaration = constant?.value.parent;
+  if (constant === undefined || declaration === undefined || !ts.isVariableDeclaration(declaration)) {
+    return false;
+  }
+  // The annotation, not the initializer, is the type of the constant: `const X: string = "a"` admits any string.
+  return declaration.type === undefined
+    ? hasLiteralType(constant.value, constant.context, readSource, depth + 1)
+    : isConstantType(declaration.type, constant.context, readSource, depth + 1);
+}
+
+/**
+ * Checks whether the type TypeScript infers for the initializer of a `const` or of a property of a read-only object
+ * only admits SQL fixed in the code: a string literal, a ternary between them, a name or property of such a type, or
+ * an assertion to such a type. A template literal with substitutions widens to `string`.
+ * @param {ts.Expression} expression - Initializer.
+ * @param {ModuleContext} context - Module of the expression.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @param {number} depth - Imports followed so far.
+ * @returns {boolean} Whether every value of its inferred type is proven to be a literal.
+ */
+function hasLiteralType(expression, context, readSource, depth) {
+  if (depth >= MAX_IMPORT_DEPTH) {
+    return false;
+  }
+  if (ts.isParenthesizedExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isNonNullExpression(expression)) {
+    return hasLiteralType(expression.expression, context, readSource, depth);
+  }
+  if (ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression)) {
+    return expression.type.getText() === "const"
+      ? hasLiteralType(expression.expression, context, readSource, depth)
+      : isConstantType(expression.type, context, readSource, depth + 1);
+  }
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return true;
+  }
+  if (ts.isConditionalExpression(expression)) {
+    return (
+      hasLiteralType(expression.whenTrue, context, readSource, depth + 1) &&
+      hasLiteralType(expression.whenFalse, context, readSource, depth + 1)
+    );
+  }
+  if (ts.isIdentifier(expression)) {
+    return isLiteralTypedName(expression, context, readSource, depth + 1);
+  }
+  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) {
+    return isConstantProperty({ object: expression.expression, name: expression.name.text, typed: true }, context, readSource, depth);
   }
   return false;
 }

@@ -135,6 +135,30 @@ describe("raw-sql-injection-risk con valores resueltos por tipo", () => {
       assert.equal(reportsRepository({ "src/repository.ts": source }), true, source);
     }
   });
+
+  it("descarta typeof de constantes cuyo tipo declarado o inferido es un literal", () => {
+    const cases = [
+      'const TABLE: "users" | "teams" = "users";\nfunction run(table: typeof TABLE) {\n  return sql.raw(table);\n}\n',
+      'const TABLE = "users";\nfunction run(table: typeof TABLE) {\n  return sql.raw(table);\n}\n',
+      'const NAME = "a";\nconst T = { a: NAME } as const;\nfunction run(key: typeof T.a) {\n  return sql.raw(key);\n}\n',
+    ];
+    for (const source of cases) {
+      assert.equal(reportsRepository({ "src/repository.ts": source }), false, source);
+    }
+  });
+
+  it("mantiene typeof de constantes cuyo tipo declarado o inferido admite cualquier string", () => {
+    const cases = [
+      'const DEFAULT: string = "users";\nfunction run(table: typeof DEFAULT) {\n  return sql.raw(table);\n}\n',
+      'const DEFAULT = "users" as string;\nfunction run(table: typeof DEFAULT) {\n  return sql.raw(table);\n}\n',
+      `const PREFIX = "a";\nconst TABLE = \`x_\${PREFIX}\`;\nfunction run(table: typeof TABLE) {\n  return sql.raw(table);\n}\n`,
+      'const NAME: string = "a";\nconst T = { a: NAME } as const;\nfunction run(key: typeof T.a) {\n  return sql.raw(key);\n}\n',
+      'const NAME: string = "a";\nconst T = { a: NAME } as const;\nfunction run(key: (typeof T)[keyof typeof T]) {\n  return sql.raw(key);\n}\n',
+    ];
+    for (const source of cases) {
+      assert.equal(reportsRepository({ "src/repository.ts": source }), true, source);
+    }
+  });
 });
 
 describe("no-set-state-after-await-in-effect con cancelación en el cleanup", () => {
@@ -269,6 +293,11 @@ describe("no-loading-flag-reset-outside-finally con el reset en finally", () => 
 
   it("descarta el reset en finally condicionado a algo que el try no asigna", () => {
     assert.equal(reportsIn(rule, source, "setInFlight(false)"), false);
+    const derivedOwner = source.replace(
+      "      if (controller.current === current) {",
+      "      const isOwner = controller.current === current;\n      if (isOwner) {",
+    );
+    assert.equal(reportsIn(rule, derivedOwner, "setInFlight(false)"), false);
   });
 
   it("mantiene el reset cuya condición depende de cómo terminó el try", () => {
@@ -277,6 +306,16 @@ describe("no-loading-flag-reset-outside-finally con el reset en finally", () => 
       .replace("      await work(current.signal);", "      await work(current.signal);\n      finished = true;")
       .replace("if (controller.current === current)", "if (finished)");
     assert.equal(reportsIn(rule, dependsOnTry, "setInFlight(false)"), true);
+    const derivedFromTry = source
+      .replace("    try {", "    let response;\n    try {")
+      .replace("      await work(current.signal);", "      response = await work(current.signal);")
+      .replace("      if (controller.current === current) {", "      const success = !!response;\n      if (success) {");
+    assert.equal(reportsIn(rule, derivedFromTry, "setInFlight(false)"), true);
+    const mutableGuard = source.replace(
+      "      if (controller.current === current) {",
+      "      let isOwner = controller.current === current;\n      if (isOwner) {",
+    );
+    assert.equal(reportsIn(rule, mutableGuard, "setInFlight(false)"), true);
     const callInCondition = source.replace("if (controller.current === current)", "if (isOwner(current))");
     assert.equal(reportsIn(rule, callInCondition, "setInFlight(false)"), true);
     const earlyExit = source.replace("      if (controller.current === current) {", "      if (current.signal.aborted) return;\n      if (controller.current === current) {");
@@ -327,6 +366,8 @@ describe("no-prop-callback-in-render con el setter del propio componente", () =>
     assert.equal(reportsIn(rule, fromProps, marker), true);
     const exported = source.replace("function useMilestoneStep(", "export function useMilestoneStep(");
     assert.equal(reportsIn(rule, exported, marker), true);
+    const exportedWithAlias = `${source}export { useMilestoneStep as useStep };\n`;
+    assert.equal(reportsIn(rule, exportedWithAlias, marker), true);
     const mutated = source.replace("  const { setters } = workflow;", "  const { setters } = workflow;\n  setters.setStep = console.log;");
     assert.equal(reportsIn(rule, mutated, marker), true);
     const notReact = source.replace('import { useMemo, useState } from "react";', 'import { useMemo, useState } from "./hooks";');
@@ -369,6 +410,16 @@ describe("effect-needs-cleanup con métodos del proyecto que devuelven Promise<v
     assert.equal(reportsIn(rule, handle, "options.observe(", message), true);
     const untyped = source.replace("export function useResource(options: Options)", "export function useResource(options)");
     assert.equal(reportsIn(rule, untyped, "options.observe(", message), true);
+    const typeParameter = source.replace(
+      "export function useResource(options: Options)",
+      "export function useResource<Options extends { observe(request: unknown, settle: unknown): () => void }>(options: Options)",
+    );
+    assert.equal(reportsIn(rule, typeParameter, "options.observe(", message), true);
+    const localType = source.replace(
+      "  const read = async () => {",
+      "  type Options = { observe(request: unknown, settle: unknown): () => void };\n  const local: Options = options;\n  const read = async () => {",
+    ).replace("await options.observe(", "await local.observe(");
+    assert.equal(reportsIn(rule, localType, "local.observe(", message), true);
     const otherName = source.replace("options.observe(", "options.observe.call(options, ");
     assert.equal(reportsIn(rule, otherName, "options.observe.call(", message), true);
   });

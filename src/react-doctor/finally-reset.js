@@ -3,7 +3,8 @@
  * react-doctor's `no-loading-flag-reset-outside-finally` also reports a reset inside `finally` when an `if` guards
  * it, unless it recognizes the guard as an ownership check. A `finally` runs on both paths, so the reset runs on
  * rejection exactly when it runs on success as long as its condition does not depend on how the `try` ended: the
- * condition must not read anything the `try` or the `catch` assigns. Writes made by functions they call are not
+ * condition must not read anything the `try` or the `catch` assigns. A `const` the `finally` declares is read through
+ * its initializer, so `const success = !!response` depends on the `response` the `try` assigns. Writes made by functions they call are not
  * followed: an ownership check (`if (controller.current === current)`) reads a ref that only a newer run replaces,
  * and a newer run reaches its own `finally`.
  */
@@ -161,6 +162,55 @@ function listReadPaths(condition) {
 }
 
 /**
+ * Replaces the reads of constants that a `finally` block declares with the reads of their initializers, until every
+ * path starts at a variable declared outside the block. A variable of the block that is not a `const` with an
+ * initializer may change before the condition, so it gives `undefined`.
+ * @param {AccessPath[]} paths - Paths a condition reads.
+ * @param {ts.Block} finallyBlock - `finally` block.
+ * @param {Set<ts.Identifier>} [followed] - Constants already replaced, so a cycle cannot loop forever.
+ * @returns {AccessPath[] | undefined} The paths read from outside the block.
+ */
+function followLocalConstants(paths, finallyBlock, followed = new Set()) {
+  /** @type {AccessPath[]} */
+  const outer = [];
+  for (const path of paths) {
+    const { root } = path;
+    if (typeof root === "string" || root.pos < finallyBlock.pos || root.end > finallyBlock.end) {
+      outer.push(path);
+      continue;
+    }
+    if (followed.has(root)) {
+      continue;
+    }
+    followed.add(root);
+    const declaration = findVariableDeclaration(root);
+    const isConst = declaration !== undefined && (declaration.parent.flags & ts.NodeFlags.Const) !== 0;
+    const reads = isConst && declaration.initializer !== undefined ? listReadPaths(declaration.initializer) : undefined;
+    const followedReads = reads === undefined ? undefined : followLocalConstants(reads, finallyBlock, followed);
+    if (followedReads === undefined) {
+      return undefined;
+    }
+    outer.push(...followedReads);
+  }
+  return outer;
+}
+
+/**
+ * Finds the variable declaration that declares an identifier, also through a destructuring pattern.
+ * @param {ts.Identifier} identifier - Declaring identifier.
+ * @returns {ts.VariableDeclaration | undefined} Its declaration, or `undefined` for a parameter, a function or another
+ * kind of binding.
+ */
+function findVariableDeclaration(identifier) {
+  /** @type {ts.Node} */
+  let node = identifier.parent;
+  while (ts.isBindingElement(node) || ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+    node = node.parent;
+  }
+  return ts.isVariableDeclaration(node) && ts.isVariableDeclarationList(node.parent) ? node : undefined;
+}
+
+/**
  * Lists the conditions that decide whether a node of a `finally` block runs: the tests of the `if`s, ternaries and
  * `&&`/`||` that contain it. Statements that can leave the block before it, and loops or `switch`es around it, make
  * the answer unknown.
@@ -250,8 +300,10 @@ function isIndependentOfOutcome(call, statement) {
     return false;
   }
   const written = [...tryWrites, ...catchWrites];
+  const finallyBlock = /** @type {ts.Block} */ (statement.finallyBlock);
   return guards.every((guard) => {
-    const read = listReadPaths(guard);
+    const direct = listReadPaths(guard);
+    const read = direct === undefined ? undefined : followLocalConstants(direct, finallyBlock);
     return read !== undefined && read.every((path) => written.every((write) => !overlaps(path, write)));
   });
 }

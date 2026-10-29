@@ -3,11 +3,13 @@
  * for a subscription by its name (`observe`, `subscribe`, `listen`...) is an asynchronous operation of the project.
  * Browser subscriptions (`IntersectionObserver.observe`, `addEventListener`) return nothing or a handle to release;
  * a method that the project declares as `Promise<void>` finishes on its own and leaves nothing to release. A
- * `Promise` of a value, which may be an unsubscribe function, is still reported.
+ * `Promise` of a value, which may be an unsubscribe function, is still reported. Type names are resolved in the
+ * lexical scope of their use, so a type parameter or a local type that shadows a module-level one is never taken
+ * for it.
  */
 import ts from "typescript";
 import { findCallAt, followImport } from "./project-modules.js";
-import { findDeclaration, unwrapExpression } from "./source-scope.js";
+import { declaresTypeParameter, findDeclaration, unwrapExpression } from "./source-scope.js";
 
 /** @typedef {import("./project-modules.js").SourceReader} SourceReader */
 /** @typedef {import("./project-modules.js").ModuleContext} ModuleContext */
@@ -19,8 +21,8 @@ const MAX_TYPE_DEPTH = 6;
 const RESOURCE_NAME_PATTERN = /^`([\w$]+)`/u;
 
 /**
- * Finds the members of an object type: a type literal, an interface or a type alias of one, declared in the module
- * or imported from another module of the project.
+ * Finds the members of an object type: a type literal, an interface or a type alias of one, declared in an enclosing
+ * block, in the module or imported from another module of the project.
  * @param {ts.TypeNode} type - Declared type.
  * @param {ModuleContext} context - Module of the type.
  * @param {SourceReader} readSource - Reads files of the project.
@@ -40,7 +42,72 @@ function resolveMembers(type, context, readSource, depth) {
   if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName) || type.typeArguments !== undefined) {
     return undefined;
   }
-  return resolveNamedMembers(type.typeName.text, context, readSource, depth + 1);
+  const local = findLocalTypeDeclaration(type.typeName);
+  if (local === undefined) {
+    return resolveNamedMembers(type.typeName.text, context, readSource, depth + 1);
+  }
+  return local === null ? undefined : membersOfDeclaration(local, context, readSource, depth + 1);
+}
+
+/**
+ * Finds the declaration a type name has in the scopes that enclose its use, below the module level.
+ * @param {ts.Identifier} name - Type name at its point of use.
+ * @returns {ts.Statement | null | undefined} The type alias or interface of an enclosing block, `null` when a type
+ * parameter or another local declaration (class, enum) holds the name, `undefined` when only the module scope can.
+ */
+function findLocalTypeDeclaration(name) {
+  /** @type {ts.Node} */
+  let scope = name.parent;
+  while (!ts.isSourceFile(scope)) {
+    if (declaresTypeParameter(scope, name.text)) {
+      return null;
+    }
+    if (ts.isBlock(scope) || ts.isModuleBlock(scope) || ts.isCaseClause(scope) || ts.isDefaultClause(scope)) {
+      const declared = findTypeDeclaration(scope.statements, name.text);
+      if (declared !== undefined) {
+        return declared;
+      }
+    }
+    scope = scope.parent;
+  }
+  return undefined;
+}
+
+/**
+ * Finds a declaration of a type name among statements.
+ * @param {readonly ts.Statement[]} statements - Statements of a block or module.
+ * @param {string} name - Type name.
+ * @returns {ts.Statement | null | undefined} The type alias or interface, `null` for a class or enum of the name,
+ * `undefined` when none declares it.
+ */
+function findTypeDeclaration(statements, name) {
+  for (const statement of statements) {
+    if ((ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) && statement.name.text === name) {
+      return statement;
+    }
+    if ((ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name?.text === name) {
+      return null;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Reads the members a type alias or an interface declares.
+ * @param {ts.Statement} declaration - Type alias or interface.
+ * @param {ModuleContext} context - Module of the declaration.
+ * @param {SourceReader} readSource - Reads files of the project.
+ * @param {number} depth - Declarations followed so far.
+ * @returns {{ members: readonly ts.TypeElement[]; context: ModuleContext } | undefined} The members and their module.
+ */
+function membersOfDeclaration(declaration, context, readSource, depth) {
+  if (ts.isTypeAliasDeclaration(declaration)) {
+    return declaration.typeParameters === undefined ? resolveMembers(declaration.type, context, readSource, depth) : undefined;
+  }
+  // Members of an extended interface are not followed, but a member the interface declares is its own.
+  return ts.isInterfaceDeclaration(declaration) && declaration.typeParameters === undefined
+    ? { members: declaration.members, context }
+    : undefined;
 }
 
 /**
@@ -52,14 +119,9 @@ function resolveMembers(type, context, readSource, depth) {
  * @returns {{ members: readonly ts.TypeElement[]; context: ModuleContext } | undefined} The members and their module.
  */
 function resolveNamedMembers(name, context, readSource, depth) {
-  for (const statement of context.sourceFile.statements) {
-    if (ts.isTypeAliasDeclaration(statement) && statement.name.text === name) {
-      return statement.typeParameters === undefined ? resolveMembers(statement.type, context, readSource, depth) : undefined;
-    }
-    if (ts.isInterfaceDeclaration(statement) && statement.name.text === name) {
-      // Members of an extended interface are not followed, but a member the interface declares is its own.
-      return statement.typeParameters === undefined ? { members: statement.members, context } : undefined;
-    }
+  const declared = findTypeDeclaration(context.sourceFile.statements, name);
+  if (declared !== undefined) {
+    return declared === null ? undefined : membersOfDeclaration(declared, context, readSource, depth);
   }
   const imported = depth < MAX_TYPE_DEPTH ? followImport(name, context, readSource) : undefined;
   return imported === undefined ? undefined : resolveNamedMembers(imported.name, imported.context, readSource, depth + 1);
@@ -87,6 +149,20 @@ function shadowsPromise(context) {
           : namedBindings.elements.some((element) => element.name.text === "Promise")))
     );
   });
+}
+
+/**
+ * Checks whether the name `Promise` at a return type may be another type than the global one: a type parameter or a
+ * local type of an enclosing scope, or a declaration or import of the module.
+ * @param {ts.TypeNode} type - Return type.
+ * @param {ModuleContext} context - Module of the type.
+ * @returns {boolean} Whether `Promise` there may be another type.
+ */
+function shadowsPromiseAt(type, context) {
+  return (
+    (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && findLocalTypeDeclaration(type.typeName) !== undefined) ||
+    shadowsPromise(context)
+  );
 }
 
 /**
@@ -175,7 +251,9 @@ export function callsPromiseMethod({ filePath, line, column, message }, readSour
   return (
     resolved !== undefined &&
     methods.length > 0 &&
-    !shadowsPromise(resolved.context) &&
-    methods.every((method) => isEmptyPromise(readReturnType(method)))
+    methods.every((method) => {
+      const type = readReturnType(method);
+      return isEmptyPromise(type) && type !== undefined && !shadowsPromiseAt(type, resolved.context);
+    })
   );
 }

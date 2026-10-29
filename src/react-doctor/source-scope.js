@@ -202,7 +202,8 @@ export function isVariableReference(identifier) {
       ts.isEnumMember(parent)) &&
       parent.name === identifier) ||
     (ts.isBindingElement(parent) && parent.propertyName === identifier) ||
-    ((ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent)) && parent.propertyName === identifier) ||
+    (ts.isImportSpecifier(parent) && parent.propertyName === identifier) ||
+    (ts.isExportSpecifier(parent) && !isExportedLocal(parent, identifier)) ||
     ts.isJsxAttribute(parent) ||
     ts.isLabeledStatement(parent) ||
     ts.isBreakOrContinueStatement(parent) ||
@@ -211,6 +212,18 @@ export function isVariableReference(identifier) {
     return false;
   }
   return findDeclaredNode(identifier) === undefined;
+}
+
+/**
+ * Checks whether an identifier of an export specifier is the local binding it exports: `name` in `export { name }`
+ * and in `export { name as alias }`. The exported alias and the names of `export { ... } from "..."` belong to other
+ * modules.
+ * @param {ts.ExportSpecifier} specifier - Export specifier.
+ * @param {ts.Identifier} identifier - One of its names.
+ * @returns {boolean} Whether it reads the local binding.
+ */
+function isExportedLocal(specifier, identifier) {
+  return specifier.parent.parent.moduleSpecifier === undefined && (specifier.propertyName ?? specifier.name) === identifier;
 }
 
 /**
@@ -259,6 +272,20 @@ export function listReferences(root, declaration) {
   };
   visit(root);
   return references;
+}
+
+/**
+ * Checks whether a node declares a type parameter of a name, which hides any type of that name.
+ * @param {ts.Node} node - Function, class, interface, type alias, method or mapped type.
+ * @param {string} name - Type name.
+ * @returns {boolean} Whether one of its type parameters has the name.
+ */
+export function declaresTypeParameter(node, name) {
+  if (ts.isMappedTypeNode(node) || ts.isInferTypeNode(node)) {
+    return node.typeParameter.name.text === name;
+  }
+  const { typeParameters } = /** @type {{ typeParameters?: ts.NodeArray<ts.TypeParameterDeclaration> }} */ (node);
+  return typeParameters?.some((parameter) => parameter.name.text === name) ?? false;
 }
 
 /**
