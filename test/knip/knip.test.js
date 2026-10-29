@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createKnipConfig, KNIP_DEFAULTS } from "../../src/knip/index.js";
@@ -46,9 +49,22 @@ describe("createKnipConfig", () => {
       "open-next.config.ts",
       ".golfo-rp/*.{js,cjs,mjs}",
       "scripts/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+      ".dependency-cruiser.mjs",
       "tests/runtime/*/index.ts",
     ]);
     assert.equal(createKnipConfig({}, { projectDirectory: fixturePath("knip-project") }).entry, undefined);
+  });
+
+  it("no toma la config de una herramienta como entrada cuando el proyecto depende de ella: su plugin de knip la encuentra", () => {
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "golfo-knip-"));
+    try {
+      writeFileSync(path.join(projectDirectory, "package.json"), JSON.stringify({ devDependencies: { stylelint: "1.0.0" } }));
+      writeFileSync(path.join(projectDirectory, "stylelint.config.mjs"), "export default {};\n");
+      writeFileSync(path.join(projectDirectory, ".dependency-cruiser.mjs"), "export default {};\n");
+      assert.deepEqual(createKnipConfig({}, { projectDirectory }).entry, [".dependency-cruiser.mjs"]);
+    } finally {
+      rmSync(projectDirectory, { recursive: true, force: true });
+    }
   });
 
   it("le pasa al plugin de Playwright todas sus configs, también las de otras suites", () => {

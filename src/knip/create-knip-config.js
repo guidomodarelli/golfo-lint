@@ -55,12 +55,30 @@ const PLAYWRIGHT_CONFIG_PATTERN = /^playwright(?:\.[\w-]+)?\.config\.[cm]?[jt]s$
  * Entry files that tools other than knip's plugins load, kept only when they exist:
  * - `open-next.config.ts`, read by OpenNext when it builds a Next.js app for Cloudflare;
  * - the scripts `@golfo/rp` writes to `.golfo-rp/` (`vercel.json` runs `.golfo-rp/vercel-ignore-build.mjs`);
- * - `scripts/`, Node.js scripts that people and CI jobs run by path (`node scripts/configure-cors.mjs`).
+ * - `scripts/`, Node.js scripts that people and CI jobs run by path (`node scripts/configure-cors.mjs`);
+ * - the dependency-cruiser and Stylelint configs in JavaScript, which `golfo-lint architecture` and `golfo-lint styles`
+ *   load. knip's plugin for each tool finds them only when the project depends on the tool (`toolPackage`); a
+ *   project that runs it through golfo-lint does not, and knip hints that the entry is redundant when it does.
+ * @type {{ path: string, pattern: string, toolPackage?: string }[]}
  */
 const TOOL_ENTRY_FILES = [
   { path: "open-next.config.ts", pattern: "open-next.config.ts" },
   { path: ".golfo-rp", pattern: ".golfo-rp/*.{js,cjs,mjs}" },
   { path: "scripts", pattern: `scripts/**/*.{${MODULE_EXTENSIONS.join(",")}}` },
+  ...[".dependency-cruiser.js", ".dependency-cruiser.cjs", ".dependency-cruiser.mjs"].map((fileName) => ({
+    path: fileName,
+    pattern: fileName,
+    toolPackage: "dependency-cruiser",
+  })),
+  ...[
+    ".stylelintrc.js",
+    ".stylelintrc.cjs",
+    ".stylelintrc.mjs",
+    "stylelint.config.js",
+    "stylelint.config.cjs",
+    "stylelint.config.mjs",
+    "stylelint.config.ts",
+  ].map((fileName) => ({ path: fileName, pattern: fileName, toolPackage: "stylelint" })),
 ];
 
 /** Dependency fields where a project declares the packages it uses. */
@@ -99,13 +117,16 @@ function readDeclaredPackages(projectDirectory) {
  * of `TOOL_ENTRY_FILES` that exist, along with knip's own defaults, which an `entry` option would otherwise replace.
  * @param {string} projectDirectory - Folder of the project.
  * @param {string[]} projectEntries - Entry patterns the project adds.
+ * @param {Set<string>} declaredPackages - Packages the project declares.
  * @returns {string[] | undefined} Entry patterns, or `undefined` to keep knip's defaults.
  */
-function listEntryFiles(projectDirectory, projectEntries) {
+function listEntryFiles(projectDirectory, projectEntries, declaredPackages) {
   const golfoRpConfig = GOLFO_RP_CONFIG_FILES.find((fileName) => existsSync(path.join(projectDirectory, fileName)));
-  const toolEntries = TOOL_ENTRY_FILES.filter((entry) => existsSync(path.join(projectDirectory, entry.path))).map(
-    (entry) => entry.pattern,
-  );
+  const toolEntries = TOOL_ENTRY_FILES.filter(
+    (entry) =>
+      existsSync(path.join(projectDirectory, entry.path)) &&
+      (entry.toolPackage === undefined || !declaredPackages.has(entry.toolPackage)),
+  ).map((entry) => entry.pattern);
   const extraEntries = [...(golfoRpConfig === undefined ? [] : [golfoRpConfig]), ...toolEntries, ...projectEntries];
   if (extraEntries.length === 0) {
     return undefined;
@@ -179,7 +200,7 @@ export function createKnipConfig(overrides = {}, options = {}) {
   const declaredPackages = readDeclaredPackages(projectDirectory);
   const builtInPackages = declaredPackages.has(NEXT_PACKAGE) ? listImportedBuiltInPackages(projectDirectory) : [];
   const ignoreDependencies = [...builtInPackages, ...(overrides.ignoreDependencies ?? [])];
-  const entry = listEntryFiles(projectDirectory, overrides.entry ?? []);
+  const entry = listEntryFiles(projectDirectory, overrides.entry ?? [], declaredPackages);
   const playwrightConfigs = listPlaywrightConfigs(projectDirectory, declaredPackages);
   return {
     ...KNIP_DEFAULTS,

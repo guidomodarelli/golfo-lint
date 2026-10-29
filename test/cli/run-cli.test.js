@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { LINT_COMMANDS } from "../../src/cli/commands/index.js";
@@ -62,6 +65,19 @@ describe("runCli", () => {
   it("duplicates no cuenta los tests duplicados", async () => {
     const options = createSilentOptions();
     assert.equal(await runCli(["duplicates"], { ...options, cwd: fixturePath("duplicated-tests") }), EXIT_CODE_SUCCESS);
+  });
+
+  it("duplicates pasa cuando el código copiado queda por debajo del umbral", async () => {
+    const projectDirectory = mkdtempSync(path.join(tmpdir(), "golfo-jscpd-"));
+    try {
+      cpSync(fixturePath("duplicated"), projectDirectory, { recursive: true });
+      const uniqueLines = Array.from({ length: 3000 }, (_, index) => `export const value${index} = ${index};`);
+      writeFileSync(path.join(projectDirectory, "unique.js"), `${uniqueLines.join("\n")}\n`);
+      const options = createSilentOptions();
+      assert.equal(await runCli(["duplicates"], { ...options, cwd: projectDirectory }), EXIT_CODE_SUCCESS);
+    } finally {
+      rmSync(projectDirectory, { recursive: true, force: true });
+    }
   });
 
   it("duplicates pasa cuando no hay código copiado", async () => {

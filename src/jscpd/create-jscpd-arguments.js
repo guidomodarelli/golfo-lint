@@ -8,11 +8,12 @@ const MIN_CLONE_TOKENS = 50;
 /** Fewest lines a repeated block needs to count as a clone. */
 const MIN_CLONE_LINES = 5;
 
-/** Highest share of duplicated lines, in percent, before jscpd fails. */
+/**
+ * Highest share of duplicated lines, in percent, before jscpd fails. Above it jscpd exits with 1; below it the
+ * clones are listed and it exits with 0. jscpd's `--exit-code` is not passed: it fails on any clone, whatever the
+ * threshold.
+ */
 const MAX_DUPLICATION_PERCENT = 1;
-
-/** Exit code jscpd returns when it finds clones above the threshold. */
-const EXIT_CODE_CLONES_FOUND = 1;
 
 /** Languages checked for clones. */
 const CHECKED_FORMATS = ["javascript", "typescript", "jsx", "tsx", "css", "scss"];
@@ -26,7 +27,6 @@ export const JSCPD_DEFAULTS = {
   // jscpd splits `--ignore` on commas, so brace groups have to be expanded first.
   ignore: [...IGNORED_PATH_GLOBS, ...TEST_FILE_GLOBS].flatMap((glob) => expandBraces(glob)),
   reporters: ["console"],
-  exitCode: EXIT_CODE_CLONES_FOUND,
 };
 
 /**
@@ -49,7 +49,5 @@ export function createJscpdArguments(overrides = {}) {
     config.ignore.join(","),
     "--reporters",
     config.reporters.join(","),
-    "--exit-code",
-    String(config.exitCode),
   ];
 }

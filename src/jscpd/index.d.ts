@@ -7,7 +7,6 @@ export interface JscpdDefaults {
   format: string[];
   ignore: string[];
   reporters: string[];
-  exitCode: number;
 }
 
 export const JSCPD_DEFAULTS: JscpdDefaults;

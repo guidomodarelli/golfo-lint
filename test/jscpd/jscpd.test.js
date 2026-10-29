@@ -6,7 +6,10 @@ describe("createJscpdArguments", () => {
   it("falla por encima del umbral de duplicación compartido", () => {
     const jscpdArguments = createJscpdArguments();
     assert.equal(jscpdArguments[jscpdArguments.indexOf("--threshold") + 1], String(JSCPD_DEFAULTS.threshold));
-    assert.equal(jscpdArguments[jscpdArguments.indexOf("--exit-code") + 1], "1");
+  });
+
+  it("no pasa --exit-code, que haría fallar con cualquier clon aunque esté por debajo del umbral", () => {
+    assert.equal(createJscpdArguments().includes("--exit-code"), false);
   });
 
   it("acepta valores propios del proyecto", () => {
