@@ -18,6 +18,13 @@ const MAX_DUPLICATION_PERCENT = 1;
 /** Languages checked for clones. */
 const CHECKED_FORMATS = ["javascript", "typescript", "jsx", "tsx", "css", "scss"];
 
+/**
+ * Code jscpd skips while matching: ES module `import` statements, single or multi-line, including side-effect
+ * imports. Two files that import the same modules are not copied code, and the only way to "fix" such a clone
+ * would be to reorder the imports. It has no commas because jscpd splits `--ignore-pattern` on them.
+ */
+const IMPORT_STATEMENT_PATTERN = String.raw`(?m)^import\s(?:[^;"']*?\sfrom\s*)?["'][^"']*["'];?`;
+
 /** Defaults of `golfo-lint duplicates`, in the shape of a `.jscpd.json` file. */
 export const JSCPD_DEFAULTS = {
   minTokens: MIN_CLONE_TOKENS,
@@ -26,6 +33,7 @@ export const JSCPD_DEFAULTS = {
   format: CHECKED_FORMATS,
   // jscpd splits `--ignore` on commas, so brace groups have to be expanded first.
   ignore: [...IGNORED_PATH_GLOBS, ...TEST_FILE_GLOBS].flatMap((glob) => expandBraces(glob)),
+  ignorePattern: [IMPORT_STATEMENT_PATTERN],
   reporters: ["console"],
 };
 
@@ -47,6 +55,7 @@ export function createJscpdArguments(overrides = {}) {
     config.format.join(","),
     "--ignore",
     config.ignore.join(","),
+    ...(config.ignorePattern.length > 0 ? ["--ignore-pattern", config.ignorePattern.join(",")] : []),
     "--reporters",
     config.reporters.join(","),
   ];

@@ -12,6 +12,15 @@ describe("createJscpdArguments", () => {
     assert.equal(createJscpdArguments().includes("--exit-code"), false);
   });
 
+  it("ignora las sentencias import, que no son código copiado", () => {
+    const jscpdArguments = createJscpdArguments();
+    const pattern = new RegExp(jscpdArguments[jscpdArguments.indexOf("--ignore-pattern") + 1].replace("(?m)", ""), "m");
+    assert.match('import { a, b } from "./module";', pattern);
+    assert.match('import type {\n  A,\n  B,\n} from "@/types";', pattern);
+    assert.match('import "./side-effect.css";', pattern);
+    assert.doesNotMatch("const imported = load(value);", pattern);
+  });
+
   it("acepta valores propios del proyecto", () => {
     const jscpdArguments = createJscpdArguments({ minTokens: 80, reporters: ["console", "json"] });
     assert.equal(jscpdArguments[jscpdArguments.indexOf("--min-tokens") + 1], "80");
